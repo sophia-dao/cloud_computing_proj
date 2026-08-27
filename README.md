@@ -1,6 +1,6 @@
 # Cloud Computing Project
 
-## 📅 Project Timeline
+## Project Timeline
 
 ```mermaid
 timeline
