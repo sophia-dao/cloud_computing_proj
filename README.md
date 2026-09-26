@@ -41,14 +41,20 @@ The application is planned to support:
 * Shopping list recommendations based on missing ingredients.
 * Dietary, allergy, cuisine, vegan, halal, and similar filters.
 * Recipe cost indicators.
-* AI-generated recipes.
-* AI recipe assistant/chatbot.
-* Recipe scanning and ingredient extraction.
-* Interface customization.
 * Administrative account functionality.
 * Contact and customer support functionality.
 
-Some advanced features may be implemented after completion of the project's core functionality.
+### Potential / Future Features
+
+The following features are being considered but are not currently part of the committed system design:
+
+* AI-generated recipes.
+* AI recipe assistant/chatbot.
+* Recipe scanning and automatic ingredient extraction.
+* Advanced interface customization.
+* Additional intelligent recommendation features.
+
+The scope and implementation of these features will be determined based on project progress, available resources, and technical feasibility.
 
 ## High-Level Architecture
 
@@ -69,8 +75,7 @@ Backend REST API
   ├── Ingredient Inventory
   ├── Recommendation System
   ├── Reviews
-  ├── Shopping Lists
-  └── AI Services
+  └── Shopping Lists
           │
           ▼
       Data Storage
@@ -90,9 +95,8 @@ The application will be deployed using Amazon Web Services (AWS).
 | Version Control | Git / GitHub                           |
 | Frontend        | TBD                                    |
 | Authentication  | TBD                                    |
-| AI Integration  | TBD                                    |
 
-Specific frameworks and AWS services will be selected during the system design process.
+Specific frameworks, AWS services, and additional technologies will be selected during the system design process.
 
 ## Design Principles
 
@@ -103,7 +107,7 @@ The project will follow several core software design principles:
 * **Modularity:** Major application functionality will be divided into independent modules.
 * **Scalability:** Components should be designed so they can be expanded as application requirements grow.
 * **Security:** Authentication, authorization, input validation, and secure credential management will be considered throughout development.
-* **Cloud-Native Design:** AWS services will be used where appropriate to support deployment, storage, scalability, monitoring, and other application requirements.
+* **Cloud-Based Design:** AWS services will be used where appropriate to support deployment, storage, scalability, monitoring, and other application requirements.
 
 ## Project Documentation
 
