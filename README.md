@@ -88,7 +88,7 @@ The application will be deployed using Amazon Web Services (AWS).
 | Component       | Technology                             |
 | --------------- | -------------------------------------- |
 | Cloud Platform  | AWS                                    |
-| Backend         | Python                                 |
+| Backend         | Django (Python)                        |
 | Backend Design  | Object-Oriented / Layered Architecture |
 | API             | REST                                   |
 | Database        | Relational Database                    |
