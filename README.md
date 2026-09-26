@@ -11,25 +11,127 @@ gantt
     Final Documentation & Presentation — Due Nov 13          :milestone, documentation, 2026-11-13, 0d
 ```
 
-# Features (planned)
-- Dashboard (display recipes)
-- Review section for each recipe
-- Recipe display interface
-- Manual input of available ingredients (groceries)
-- Keep track of user's ingredients
-- Recipe scanning for recording ingredients
-- AI generated recipe
-- Manual recipe creation (ingredients as tags)
-- Filters for allegies/cuisine/vegan/halal/etc.
-- Require to add allegies/preference to account -> automatically used as default filter
-- Customization for interface
-- AI chatbot for users who can't find recipe
-- Account creation/management (user/admin)
-- Shopping list recommendation (with sub-sections)
-- Recipe lookup
-- Contact us/customer service section
-- How expensive the ingredients of a recipe is ==a> Tag features for recipe to allert users of allegies/vegan/halal recipe
+# Recipe Suggestion App
 
-# Later
-- name
-- logo
+## Overview
+
+The Recipe Suggestion App is a cloud-based web application that helps users decide what to cook based on ingredients they already have.
+
+Users can maintain a personal inventory of available ingredients and receive recipe suggestions that make use of those ingredients. Recommendations can also consider dietary preferences, allergies, cuisine preferences, and other user-defined filters.
+
+The project aims to help users save time and money while reducing unnecessary food waste.
+
+## Target Users
+
+The primary target users are college students and individuals who want convenient and affordable meal ideas without spending significant time deciding what to cook or purchasing additional ingredients.
+
+## Core Features
+
+The application is planned to support:
+
+* User account creation and authentication.
+* Personalized user dashboard and logged-in experience.
+* User profile, preferences, and allergy management.
+* Personal ingredient inventory.
+* Recipe recommendations based on available ingredients.
+* Recipe search and filtering.
+* Recipe display and cooking instructions.
+* Manual recipe creation.
+* Recipe reviews and ratings.
+* Shopping list recommendations based on missing ingredients.
+* Dietary, allergy, cuisine, vegan, halal, and similar filters.
+* Recipe cost indicators.
+* AI-generated recipes.
+* AI recipe assistant/chatbot.
+* Recipe scanning and ingredient extraction.
+* Interface customization.
+* Administrative account functionality.
+* Contact and customer support functionality.
+
+Some advanced features may be implemented after completion of the project's core functionality.
+
+## High-Level Architecture
+
+The application will use a cloud-based client-server architecture.
+
+```text
+User
+  │
+  ▼
+Web Frontend
+  │
+  ▼
+Backend REST API
+  │
+  ├── Authentication
+  ├── User Management
+  ├── Recipe Management
+  ├── Ingredient Inventory
+  ├── Recommendation System
+  ├── Reviews
+  ├── Shopping Lists
+  └── AI Services
+          │
+          ▼
+      Data Storage
+```
+
+The application will be deployed using Amazon Web Services (AWS).
+
+## Technology Stack
+
+| Component       | Technology                             |
+| --------------- | -------------------------------------- |
+| Cloud Platform  | AWS                                    |
+| Backend         | Python                                 |
+| Backend Design  | Object-Oriented / Layered Architecture |
+| API             | REST                                   |
+| Database        | Relational Database                    |
+| Version Control | Git / GitHub                           |
+| Frontend        | TBD                                    |
+| Authentication  | TBD                                    |
+| AI Integration  | TBD                                    |
+
+Specific frameworks and AWS services will be selected during the system design process.
+
+## Design Principles
+
+The project will follow several core software design principles:
+
+* **Object-Oriented Design:** Backend components will use clear domain objects and service classes.
+* **Separation of Concerns:** Presentation, business logic, data access, and infrastructure will remain separated.
+* **Modularity:** Major application functionality will be divided into independent modules.
+* **Scalability:** Components should be designed so they can be expanded as application requirements grow.
+* **Security:** Authentication, authorization, input validation, and secure credential management will be considered throughout development.
+* **Cloud-Native Design:** AWS services will be used where appropriate to support deployment, storage, scalability, monitoring, and other application requirements.
+
+## Project Documentation
+
+Detailed technical documentation is maintained separately from this README:
+
+```text
+docs/
+├── requirements.md
+├── system-design.md
+├── database-design.md
+├── api-design.md
+└── aws-architecture.md
+```
+
+The main README provides a high-level overview of the project, while the documents under `docs/` contain implementation-level requirements and design decisions.
+
+## Project Structure
+
+The planned repository structure is:
+
+```text
+recipe-app/
+├── README.md
+├── docs/
+├── backend/
+├── frontend/
+├── infrastructure/
+└── tests/
+```
+
+The structure may evolve as the system architecture and technology stack are finalized.
