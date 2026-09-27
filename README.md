@@ -64,50 +64,56 @@ The application will use a cloud-based client-server architecture.
 User
   │
   ▼
-Web Frontend
+React Web Frontend
   │
+  │ REST API
   ▼
-Backend REST API
+Django REST Framework
   │
-  ├── Authentication
-  ├── User Management
+  ├── Authentication & User Management
   ├── Recipe Management
   ├── Ingredient Inventory
   ├── Recommendation System
   ├── Reviews
   └── Shopping Lists
-          │
-          ▼
-      Data Storage
+        │
+        ▼
+  ┌───────────────┐
+  │ Data & Media  │
+  │    Storage    │
+  └───────────────┘
 ```
 
 The application will be deployed using Amazon Web Services (AWS).
 
 ## Technology Stack
 
-| Component       | Technology                             |
-| --------------- | -------------------------------------- |
-| Cloud Platform  | AWS                                    |
-| Backend         | Django (Python)                        |
-| Backend Design  | Object-Oriented / Layered Architecture |
-| API             | REST                                   |
-| Database        | Relational Database                    |
-| Version Control | Git / GitHub                           |
-| Frontend        | TBD                                    |
-| Authentication  | TBD                                    |
+| Component | Technology |
+| --- | --- |
+| Cloud Platform | AWS |
+| Frontend | React |
+| Frontend Hosting | AWS |
+| Backend | Django + Django REST Framework |
+| Backend Deployment | Docker containers on AWS |
+| Database | PostgreSQL |
+| Media Storage | AWS S3|
+| API | REST |
+| Version Control | Git / GitHub |
+| Authentication | TBD |
 
-Specific frameworks, AWS services, and additional technologies will be selected during the system design process.
+Detailed AWS infrastructure and deployment decisions are documented separately in the system design and AWS architecture documentation.
 
 ## Design Principles
 
 The project will follow several core software design principles:
 
-* **Object-Oriented Design:** Backend components will use clear domain objects and service classes.
-* **Separation of Concerns:** Presentation, business logic, data access, and infrastructure will remain separated.
-* **Modularity:** Major application functionality will be divided into independent modules.
-* **Scalability:** Components should be designed so they can be expanded as application requirements grow.
-* **Security:** Authentication, authorization, input validation, and secure credential management will be considered throughout development.
-* **Cloud-Based Design:** AWS services will be used where appropriate to support deployment, storage, scalability, monitoring, and other application requirements.
+- **Object-Oriented and Component-Based Design:** The application will apply object-oriented design principles across both frontend and backend development. Backend functionality will use clearly defined models, services, and responsibilities, while the frontend will use reusable and encapsulated React components and modules.
+- **Separation of Concerns:** Presentation, business logic, data access, and infrastructure responsibilities will remain separated.
+- **Modularity:** Major application functionality will be divided into independent and reusable modules.
+- **Reusability:** Common functionality and interface elements should be implemented as reusable components or services where appropriate.
+- **Scalability:** Components should be designed so they can be expanded as application requirements grow.
+- **Security:** Authentication, authorization, input validation, and secure credential management will be considered throughout development.
+- **Cloud-Based Design:** AWS services will be used where appropriate to support deployment, storage, scalability, monitoring, and other application requirements.
 
 ## Project Documentation
 
