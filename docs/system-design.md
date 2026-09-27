@@ -496,6 +496,71 @@ Instead, both should ultimately provide a compatible ingredient/filter input to 
 
 ---
 
+# Core Business Logic Independence
+
+Core business logic should operate independently of whether the request originates from a Guest or an authenticated Registered User whenever possible.
+
+Authentication determines the availability and persistence of user-specific data, but should not require separate implementations of the same core application functionality.
+
+For example, the recommendation system accepts ingredient and preference information regardless of its source:
+
+```text
+Guest Ingredients ──────────┐
+                            │
+                            ▼
+                   RecommendationService
+                            │
+                            ▼
+                   Recipe Recommendations
+                            ▲
+                            │
+Saved User Inventory ───────┘
+```
+
+The recommendation service should receive a consistent input structure such as:
+
+```text
+RecommendationInput
+├── ingredients
+├── allergies
+├── dietary_preferences
+├── cuisine_filters
+└── other_filters
+```
+
+For a Guest, this information may originate from temporary frontend or session state.
+
+For an authenticated user, the same information may originate from persistent account data.
+
+The `RecommendationService` should not require separate recommendation algorithms for Guests and Registered Users.
+
+The same principle should be applied to other shared business operations where appropriate.
+
+For example:
+
+```text
+Guest Ingredients ──────────┐
+                            │
+                            ▼
+                    ShoppingListService
+                            │
+                            ▼
+                  Generated Shopping List
+                            ▲
+                            │
+Saved User Inventory ───────┘
+```
+
+The resulting shopping list may remain temporary for a Guest, while an authenticated user may persist the result to their account.
+
+### Design Rule
+
+> Authentication should determine identity, authorization, personalization, and persistence—not unnecessarily duplicate core business logic.
+
+This approach reduces duplicated code, keeps business rules consistent between Guests and Registered Users, and allows core application services to evolve independently from authentication and persistence mechanisms.
+
+---
+
 # 10. Authorization Model
 
 The application uses hierarchical access:
