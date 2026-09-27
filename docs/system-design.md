@@ -4,7 +4,19 @@
 
 This document describes the software architecture and design principles of the Recipe Suggestion App.
 
-The system is designed as a modular, cloud-based web application with a React frontend and a Django REST Framework backend. The frontend and backend communicate through a REST API and are designed as separate application layers.
+The system is designed as a modular cloud-based web application consisting of:
+
+- A React frontend.
+- A Django REST Framework backend.
+- A relational PostgreSQL database.
+- Cloud-based media storage.
+- AWS-based deployment infrastructure.
+
+The frontend and backend are independent application components that communicate through a REST API.
+
+---
+
+# 2. Design Goals
 
 The architecture prioritizes:
 
@@ -13,29 +25,32 @@ The architecture prioritizes:
 - Reusability.
 - Maintainability.
 - Scalability.
+- Testability.
 - Clear ownership of responsibilities.
 - Object-oriented and component-based design.
 
+The system should remain simple enough for the project team to understand and maintain while allowing individual components to grow as application requirements increase.
+
 ---
 
-# 2. Design Philosophy
+# 3. Design Philosophy
 
-## 2.1 Full-Stack Modular Design
+## 3.1 Domain-Oriented Modular Design
 
-The application will follow a modular, domain-oriented architecture across both the frontend and backend.
+The application will be organized around major application domains where practical.
 
-Instead of organizing the entire application around technical file types, functionality should be grouped around application domains where practical.
+Current domains include:
 
-Major domains currently include:
+```text
+Users / Authentication
+Recipes
+Ingredients / Inventory
+Recommendations
+Reviews
+Shopping Lists
+```
 
-- Authentication and users.
-- Recipes.
-- Ingredient inventory.
-- Recommendations.
-- Reviews.
-- Shopping lists.
-
-This creates a conceptual relationship between frontend and backend functionality:
+Frontend and backend modules should conceptually correspond to these domains:
 
 ```text
 Frontend                    Backend
@@ -48,308 +63,245 @@ reviews/          <---->    reviews/
 shopping/         <---->    shopping/
 ```
 
-The frontend and backend remain independent applications and communicate through defined REST API interfaces.
+The frontend and backend remain independent implementations and communicate through defined API interfaces.
 
 ---
 
-## 2.2 Object-Oriented Design
+## 3.2 Object-Oriented Design
 
-Object-oriented design principles will be applied where appropriate throughout the application.
+Object-oriented principles shall be used where they provide meaningful organization and abstraction.
 
-The goal is not to require every piece of code to be implemented as a class. Instead, the project will apply principles commonly associated with good object-oriented software design, including:
+Important principles include:
 
 - Encapsulation.
 - Abstraction.
-- Separation of responsibilities.
+- Clear responsibilities.
+- High cohesion.
+- Low coupling.
 - Reusability.
-- Clear interfaces between components.
-- Low coupling between unrelated modules.
-- High cohesion within related modules.
+- Defined interfaces between modules.
 
-Classes and objects should represent meaningful concepts or responsibilities rather than being introduced only for the purpose of using object-oriented syntax.
+Object-oriented design does not mean that every piece of application code must be implemented as a class.
+
+Classes should represent meaningful domain concepts or responsibilities rather than being created solely to satisfy an object-oriented programming style.
 
 ---
 
-## 2.3 Backend Design Philosophy
+## 3.3 Frontend Design Philosophy
 
-The Django backend will use object-oriented design through Django models, domain objects, services, and other appropriate abstractions.
+The React frontend will use a component-based, modular architecture.
 
-Business responsibilities should be separated where doing so improves maintainability.
+Modern React functional components and hooks should be preferred where appropriate.
+
+Object-oriented principles on the frontend will primarily be achieved through:
+
+- Component encapsulation.
+- Reusable components.
+- Feature modules.
+- Clear interfaces.
+- Service abstractions.
+- Separation between presentation and application logic.
 
 For example:
-
-```text
-Recipe
-    │
-    ├── represents recipe data and relationships
-    │
-    ▼
-RecipeService
-    │
-    ├── performs recipe-related business operations
-    │
-    ▼
-RecommendationService
-    │
-    └── performs recommendation-specific logic
-```
-
-A Django model should not become responsible for every operation related to its domain.
-
-For example, recommendation logic involving users, inventories, preferences, and multiple recipes should not be placed entirely inside the `Recipe` model.
-
-Instead, functionality involving multiple domain objects should be placed in an appropriate service or module.
-
----
-
-## 2.4 Frontend Design Philosophy
-
-The React frontend will follow component-based and modular design principles.
-
-Modern React functional components and hooks will be preferred where appropriate.
-
-Object-oriented design on the frontend does **not** mean that all React components must be implemented using JavaScript class components.
-
-Instead, frontend code should apply the same underlying software engineering principles:
-
-- Encapsulation of component behavior.
-- Reusable components.
-- Clear responsibilities.
-- Abstraction of external communication.
-- Separation of presentation and application logic.
-- Modular organization.
-
-For example, recipe functionality should be divided into reusable components rather than implemented as one large page:
 
 ```text
 Recipe Feature
-
-RecipeList
-    │
-    └── RecipeCard
-
-RecipeDetails
-    │
-    ├── IngredientList
-    ├── RecipeInstructions
-    └── ReviewSection
-
-RecipeFilter
-
-RecipeForm
+│
+├── RecipeList
+│   └── RecipeCard
+│
+├── RecipeDetails
+│   ├── IngredientList
+│   ├── RecipeInstructions
+│   └── ReviewSection
+│
+├── RecipeFilter
+└── RecipeForm
 ```
 
-Each component should have a clear responsibility.
+Large components responsible for unrelated functionality should be avoided.
 
 ---
 
-## 2.5 Separation of Concerns
+## 3.4 Backend Design Philosophy
 
-The system should separate responsibilities between application layers.
+The Django backend will use domain-focused Django applications.
 
-At a high level:
+Django models will represent persistent domain entities and relationships.
 
-```text
-┌─────────────────────────────┐
-│       Presentation          │
-│          React              │
-└──────────────┬──────────────┘
-               │
-               │ REST / HTTPS
-               ▼
-┌─────────────────────────────┐
-│          API Layer          │
-│   Django REST Framework     │
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│      Business Logic         │
-│     Services / Domain       │
-└──────────────┬──────────────┘
-               │
-               ▼
-┌─────────────────────────────┐
-│       Data / Storage        │
-│   PostgreSQL / S3 / etc.    │
-└─────────────────────────────┘
-```
-
-Responsibilities should not unnecessarily cross these boundaries.
-
-For example:
-
-- React should not directly communicate with PostgreSQL.
-- React should communicate with the backend through the REST API.
-- API endpoints should not contain large amounts of unrelated business logic.
-- Database models should primarily represent application data and domain relationships.
-- Complex operations involving multiple models should be handled by appropriate services.
-- Infrastructure-specific concerns should remain separate from application business logic.
-
----
-
-## 2.6 Reusability
-
-Common functionality should be reusable rather than duplicated.
-
-For example, the frontend should provide reusable interface components where appropriate:
-
-```text
-Button
-Input
-Modal
-LoadingIndicator
-RecipeCard
-IngredientTag
-RatingDisplay
-```
-
-Similarly, backend functionality that is shared across multiple endpoints should be implemented in reusable services, utilities, serializers, permissions, or other appropriate abstractions.
-
-Reusability should not be forced when two pieces of functionality only appear superficially similar.
-
----
-
-## 2.7 High Cohesion and Low Coupling
-
-Modules should have **high cohesion**, meaning that related functionality is kept together.
-
-Modules should also have **low coupling**, meaning that unrelated modules should depend on each other as little as practical.
+Business operations involving multiple models or significant application logic should be separated into appropriate services or modules where doing so improves maintainability.
 
 For example:
 
 ```text
-inventory/
-├── IngredientList
-├── IngredientItem
-├── AddIngredientForm
-└── inventoryService
+UserInventory
+      │
+      │
+      ├─────────────┐
+      ▼             ▼
+Ingredient       Recipe
+      │             │
+      └──────┬──────┘
+             ▼
+   RecommendationService
 ```
 
-These components belong together because they are responsible for the same application domain.
-
-Recipe functionality should not need to know how inventory interface components are internally implemented.
-
-Communication between domains should occur through clearly defined interfaces.
+Recommendation logic should not be placed entirely inside the `Recipe` or `User` model because the operation involves multiple application domains.
 
 ---
 
-## 2.8 Dependency Direction
+## 3.5 Avoid Overengineering
 
-Higher-level application functionality should avoid unnecessary dependency on infrastructure-specific implementation details.
+Abstractions should be introduced when they solve a real design problem.
 
-For example, recommendation logic should conceptually operate on recipes and ingredients rather than being tightly coupled to AWS infrastructure.
+The project should avoid:
 
-```text
-Recommendation Logic
-        │
-        ▼
-Recipe / Ingredient Data
+- Classes with no meaningful responsibility.
+- Services that simply wrap one trivial model operation.
+- Excessive inheritance.
+- Duplicate abstraction layers.
+- Unnecessary design patterns.
+- Premature microservice separation.
 
-NOT
+The initial application will use a modular monolithic backend rather than separate backend microservices.
 
-Recommendation Logic
-        │
-        ▼
-AWS-specific implementation
-```
-
-This makes application logic easier to test and allows infrastructure implementations to change with less impact on business logic.
+This provides clear module boundaries while keeping deployment and development manageable.
 
 ---
 
-# 3. High-Level Application Architecture
-
-The application consists of two primary application components:
-
-1. React web frontend.
-2. Django REST Framework backend.
-
-The frontend communicates with the backend through REST APIs.
+# 4. High-Level Application Architecture
 
 ```text
                          User
                            │
                            ▼
-                    React Frontend
+                  ┌─────────────────┐
+                  │ React Frontend  │
+                  └────────┬────────┘
                            │
                            │ HTTPS / REST
                            ▼
-                 Django REST Framework
+                  ┌─────────────────┐
+                  │ Django REST API │
+                  └────────┬────────┘
                            │
-                    Business Logic
+                           ▼
+                  ┌─────────────────┐
+                  │ Business Logic  │
+                  │    / Services   │
+                  └────────┬────────┘
                            │
                  ┌─────────┴─────────┐
                  ▼                   ▼
-             PostgreSQL             Media
-               Data                Storage
+          ┌────────────┐       ┌────────────┐
+          │ PostgreSQL │       │   Media    │
+          │    Data    │       │   Storage  │
+          └────────────┘       └────────────┘
 ```
 
-The application components will be deployed using AWS infrastructure.
+The application will be deployed using AWS infrastructure.
 
-Detailed AWS infrastructure is documented separately in `aws-architecture.md`.
+Detailed AWS deployment architecture is documented separately in `aws-architecture.md`.
 
 ---
 
-# 4. Frontend Architecture
+# 5. Frontend Architecture
 
-The frontend will be implemented using React.
-
-The frontend should be organized primarily around application features.
-
-A proposed structure is:
+## 5.1 Proposed Structure
 
 ```text
 frontend/
-└── src/
-    ├── app/
-    │   ├── App.jsx
-    │   └── routes.jsx
-    │
-    ├── features/
-    │   ├── auth/
-    │   ├── profile/
-    │   ├── recipes/
-    │   ├── inventory/
-    │   ├── recommendations/
-    │   ├── reviews/
-    │   └── shopping/
-    │
+├── public/
+│
+├── src/
+│   ├── app/
+│   │   ├── App.jsx
+│   │   └── routes.jsx
+│   │
+│   ├── features/
+│   │   ├── auth/
+│   │   ├── profile/
+│   │   ├── recipes/
+│   │   ├── inventory/
+│   │   ├── recommendations/
+│   │   ├── reviews/
+│   │   └── shopping/
+│   │
+│   ├── components/
+│   │   └── shared/
+│   │
+│   ├── services/
+│   │   └── api/
+│   │
+│   ├── hooks/
+│   ├── utils/
+│   └── main.jsx
+│
+└── package.json
+```
+
+The structure may evolve as implementation requirements become clearer.
+
+---
+
+## 5.2 Feature Modules
+
+Each major application domain should primarily own its feature-specific frontend functionality.
+
+For example:
+
+```text
+features/
+└── recipes/
     ├── components/
-    │   └── shared/
+    │   ├── RecipeCard.jsx
+    │   ├── RecipeList.jsx
+    │   ├── RecipeDetails.jsx
+    │   └── RecipeFilter.jsx
+    │
+    ├── hooks/
     │
     ├── services/
-    │   └── api/
+    │   └── recipeService.js
     │
     └── utils/
 ```
 
-Individual feature directories may contain their own:
+Not every feature requires every subdirectory.
 
-```text
-components/
-hooks/
-services/
-utils/
-```
-
-when required.
-
-Not every feature must contain every directory. Directories should only be introduced when they serve a clear purpose.
+Directories should only be created when they serve a meaningful organizational purpose.
 
 ---
 
-# 5. Backend Architecture
+## 5.3 Shared Components
 
-The backend will be implemented using Django and Django REST Framework.
+Components that are genuinely reusable across multiple application domains should be stored separately.
 
-Backend functionality will be separated into domain-focused Django applications.
+Examples may include:
 
-A proposed structure is:
+```text
+components/shared/
+├── Button.jsx
+├── Input.jsx
+├── Modal.jsx
+├── LoadingIndicator.jsx
+└── ErrorMessage.jsx
+```
+
+Feature-specific components should remain within their feature module rather than automatically being placed into the shared component directory.
+
+---
+
+# 6. Backend Architecture
+
+## 6.1 Proposed Structure
 
 ```text
 backend/
 ├── config/
+│   ├── settings.py
+│   ├── urls.py
+│   └── ...
 │
 ├── apps/
 │   ├── users/
@@ -363,9 +315,15 @@ backend/
 └── requirements/
 ```
 
-Each Django application owns functionality related to its domain.
+The backend will initially operate as a **modular monolith**.
 
-For example:
+All Django applications are deployed together as one backend application while maintaining clear logical boundaries between domains.
+
+---
+
+## 6.2 Django Application Structure
+
+A Django domain application may contain:
 
 ```text
 recipes/
@@ -373,37 +331,99 @@ recipes/
 ├── serializers.py
 ├── views.py
 ├── urls.py
+├── permissions.py
 ├── services.py
 └── tests/
 ```
 
-The exact internal structure may evolve as implementation requirements become clearer.
+Not every application is required to contain every file.
 
-Files such as `services.py` should only be introduced where a service layer provides meaningful separation of business logic.
+For example, a `services.py` file should only exist when meaningful business logic needs to be separated from models or API views.
 
 ---
 
-# 6. Frontend–Backend Communication
+# 7. Application Layers
 
-The frontend shall not access application databases or cloud storage directly unless explicitly required by the system design.
+Backend responsibilities should generally follow:
 
-Normal application operations will follow:
+```text
+HTTP Request
+     │
+     ▼
+┌──────────────────┐
+│ API / View Layer │
+└────────┬─────────┘
+         ▼
+┌──────────────────┐
+│ Business Logic   │
+│ / Service Layer  │
+└────────┬─────────┘
+         ▼
+┌──────────────────┐
+│ Domain / Models  │
+└────────┬─────────┘
+         ▼
+┌──────────────────┐
+│ Persistence      │
+└──────────────────┘
+```
+
+### API Layer
+
+Responsible for:
+
+- Receiving HTTP requests.
+- Request validation.
+- Authentication/authorization checks.
+- Calling appropriate application functionality.
+- Returning HTTP responses.
+
+### Business / Service Layer
+
+Responsible for complex business operations such as:
+
+- Recipe recommendation.
+- Shopping list generation.
+- Operations involving multiple domain models.
+
+Not every operation requires a service.
+
+### Domain / Model Layer
+
+Responsible for:
+
+- Application entities.
+- Entity relationships.
+- Model-level constraints.
+- Appropriate domain behavior.
+
+### Persistence Layer
+
+Primarily implemented through Django's ORM and external storage integrations.
+
+---
+
+# 8. Frontend–Backend Communication
+
+React shall communicate with Django through REST APIs.
+
+Normal application communication follows:
 
 ```text
 React Component
       │
       ▼
-Frontend Service / API Client
+Feature Service / API Client
       │
-      │ HTTP Request
+      │ HTTP
       ▼
-Django REST API
-      │
-      ▼
-Business Logic
+Django REST Endpoint
       │
       ▼
-Data Layer
+Application Logic
+      │
+      ▼
+Database / Storage
 ```
 
 For example:
@@ -416,34 +436,216 @@ inventoryService
       │
       │ GET /api/inventory/
       ▼
-Django Inventory API
+Inventory API
       │
       ▼
-Inventory Domain Logic
+Inventory Logic
       │
       ▼
 PostgreSQL
 ```
 
-This prevents UI components from becoming tightly coupled to backend implementation details.
+React components should not contain knowledge of database implementation details.
 
 ---
 
-# 7. Design Rules
+# 9. Guest and Authenticated State
 
-The following rules should guide implementation decisions:
+The core recipe discovery functionality shall support both guests and authenticated users.
 
-1. Components and classes should have a clear responsibility.
-2. Avoid large components or classes responsible for unrelated functionality.
-3. Avoid duplicated business logic.
-4. Prefer reusable components and services where reuse is meaningful.
-5. Keep frontend presentation separate from backend business logic.
-6. Keep infrastructure concerns separate from application business logic.
-7. Communicate between frontend and backend through defined API interfaces.
-8. Keep domain-related functionality together.
-9. Avoid unnecessary dependencies between unrelated features.
-10. Do not introduce abstractions solely for the sake of abstraction.
-11. Prefer simple implementations when additional complexity provides no clear architectural benefit.
-12. Design modules so they can be tested independently where practical.
+Guest state may exist temporarily within the frontend or other appropriate temporary storage.
 
-The architecture may evolve as project requirements become clearer. Significant architectural changes should be documented so that all team members follow the same design conventions.
+For example:
+
+```text
+Guest
+
+Temporary Ingredients
+        │
+        ▼
+Recommendation Request
+        │
+        ▼
+Recipe Results
+        │
+        ▼
+Temporary Shopping List
+```
+
+Authenticated users gain persistence:
+
+```text
+Registered User
+
+Persistent Inventory
+        │
+        ▼
+Recommendation Request
+        │
+        ▼
+Recipe Results
+        │
+        ├── Save Recipe
+        │
+        └── Save Shopping List
+```
+
+The recommendation system should not require separate recommendation implementations for guests and authenticated users.
+
+Instead, both should ultimately provide a compatible ingredient/filter input to the same recommendation logic.
+
+---
+
+# 10. Authorization Model
+
+The application uses hierarchical access:
+
+```text
+Guest
+  │
+  ▼
+Registered User
+  │
+  ▼
+Administrator
+```
+
+A Registered User has all Guest functionality plus authenticated account functionality.
+
+An Administrator has all Registered User functionality plus administrative permissions.
+
+Administrators shall continue to have access to the normal user-facing application.
+
+Authorization should be enforced by the backend.
+
+Frontend interface restrictions may improve usability but shall not be considered sufficient authorization.
+
+For example, hiding an Admin button in React does not replace backend permission checking.
+
+---
+
+# 11. Recommendation Architecture
+
+The initial recommendation system shall not depend on artificial intelligence.
+
+Conceptually:
+
+```text
+Available Ingredients
+        +
+Selected Filters
+        +
+Allergies / Preferences
+        │
+        ▼
+Recommendation Service
+        │
+        ├── Filter incompatible recipes
+        ├── Compare recipe ingredients
+        ├── Determine missing ingredients
+        └── Calculate recommendation score
+        │
+        ▼
+Ranked Recipe Results
+```
+
+The recommendation logic should remain sufficiently separated from presentation and infrastructure code so that the algorithm can be modified later.
+
+Future AI functionality may supplement this system but should not be required for core recipe recommendations.
+
+---
+
+# 12. Media Architecture
+
+Application media shall not be stored inside backend containers.
+
+Django will maintain references to media associated with application entities.
+
+Conceptually:
+
+```text
+Recipe
+  │
+  ├── Recipe Data ──────── PostgreSQL
+  │
+  └── Recipe Image ─────── Cloud Object Storage
+```
+
+This ensures media remains persistent independently of backend container deployment and scaling.
+
+Detailed AWS media architecture is documented in `aws-architecture.md`.
+
+---
+
+# 13. Deployment Boundary
+
+The system contains two independently deployable application components:
+
+```text
+┌────────────────────────────┐
+│      React Frontend        │
+└────────────────────────────┘
+
+              REST
+
+┌────────────────────────────┐
+│ Django REST API Backend    │
+│     Docker Container       │
+└────────────────────────────┘
+```
+
+The backend is packaged as a Docker container.
+
+Persistent database data and media shall remain external to the backend container.
+
+This allows backend containers to be replaced, restarted, or scaled without losing persistent application information.
+
+---
+
+# 14. Design Rules
+
+Team members should follow these general rules when implementing application functionality:
+
+1. Give components, classes, and modules clear responsibilities.
+2. Keep related functionality together.
+3. Minimize unnecessary dependencies between unrelated domains.
+4. Avoid large components or classes responsible for unrelated functionality.
+5. Avoid duplicated business logic.
+6. Use reusable components and services where reuse is meaningful.
+7. Keep frontend presentation separate from backend business logic.
+8. Keep cloud infrastructure concerns separate from application business logic.
+9. Communicate between frontend and backend through defined API contracts.
+10. Enforce authorization on the backend.
+11. Do not rely on frontend visibility to enforce permissions.
+12. Do not store persistent data inside application containers.
+13. Avoid introducing abstractions without a clear benefit.
+14. Prefer composition over unnecessary inheritance.
+15. Keep the initial system simple enough for the team to understand and maintain.
+16. Document significant architectural changes.
+
+---
+
+# 15. Related Documentation
+
+```text
+README.md
+    High-level project overview
+
+docs/
+├── requirements.md
+│   Functional and non-functional requirements
+│
+├── system-design.md
+│   Software architecture and design philosophy
+│
+├── database-design.md
+│   Database entities and relationships
+│
+├── api-design.md
+│   REST API contracts
+│
+└── aws-architecture.md
+    AWS infrastructure and deployment
+```
+
+The architecture described in this document may evolve as project requirements and implementation constraints become clearer. Significant changes should be documented so that the team maintains a consistent understanding of the system.
