@@ -4,44 +4,142 @@
 
 This document defines the functional and non-functional requirements for the Recipe Suggestion App.
 
-The application is intended to help users discover recipes based on ingredients they already have while considering personal preferences, dietary restrictions, allergies, and other supported filters.
+The application is intended to help users discover recipes based on ingredients they currently have while considering dietary restrictions, allergies, cuisine preferences, and other supported filters.
+
+The core recipe discovery functionality shall be available without requiring an account. User accounts provide persistent storage and additional personalized functionality.
 
 This document defines **what the system is expected to do**. Implementation and architectural details are documented separately in the system design and AWS architecture documentation.
 
 ---
 
-# 2. User Roles
+# 2. User Roles and Access Model
 
-The system will initially support the following user roles.
+The application will use a hierarchical access model.
+
+Higher-level roles inherit the functionality available to lower-level roles:
+
+```text
+Guest
+  │
+  │ + Persistent account functionality
+  ▼
+Registered User
+  │
+  │ + Administrative functionality
+  ▼
+Administrator
+```
+
+Therefore:
+
+- A **Guest** has access to the application's core public functionality.
+- A **Registered User** has access to all Guest functionality plus account-specific and persistent functionality.
+- An **Administrator** has access to all Registered User functionality plus administrative functionality.
+
+---
 
 ## 2.1 Guest
 
-A guest is a user who has not authenticated with an account.
+A Guest is a user who accesses the application without authenticating with an account.
 
-Guests may access supported public functionality such as:
+Guests shall be able to use the application's core recipe functionality, including:
 
-- Viewing recipes.
-- Searching recipes.
-- Viewing recipe ratings and reviews.
+- Browse recipes.
+- Search recipes.
+- View recipe details.
+- Enter available ingredients.
+- Modify their current ingredient selection.
+- Receive recipe recommendations.
+- Apply supported recipe filters.
+- Enter allergy and dietary filters.
+- Generate shopping lists based on missing ingredients.
+- View recipe ratings and reviews.
 
-Features requiring personal user data shall require authentication.
+Guest-specific information may be stored temporarily for the current session but is not required to persist across sessions.
+
+---
 
 ## 2.2 Registered User
 
-A registered user has an authenticated account and access to personalized functionality including:
+A Registered User is an authenticated application user.
 
-- Personal dashboard.
-- Ingredient inventory.
-- User preferences and allergies.
-- Personalized recipe recommendations.
-- Shopping lists.
-- Recipe creation.
-- Recipe reviews and ratings.
-- Account settings.
+Registered Users shall have access to **all functionality available to Guests**.
+
+In addition, Registered Users shall have access to functionality requiring persistent user identity and storage, including:
+
+- Save and manage a persistent ingredient inventory.
+- Save recipes.
+- Access previously saved recipes.
+- Save and manage shopping lists.
+- Save dietary preferences.
+- Save allergy information.
+- Save supported recipe preferences.
+- Submit recipe ratings and reviews.
+- Access a personalized dashboard.
+- Manage account and profile information.
+- Access other supported account-specific functionality.
+
+The primary distinction between a Guest and a Registered User is the ability to associate persistent information and user-generated content with an authenticated account.
+
+---
 
 ## 2.3 Administrator
 
-An administrator has additional permissions for managing application content and users.
+An Administrator is an authenticated Registered User with additional administrative permissions.
+
+Administrators shall have access to **all functionality available to Registered Users**, including the normal user-facing application interface.
+
+Administrators shall additionally have access to authorized administrative functionality, which may include:
+
+- User management.
+- Recipe management.
+- Review management.
+- Application content management.
+- Moderation functionality.
+- Other administrative tools introduced by the system.
+
+Administrative functionality shall only be available to accounts with the required permissions.
+
+Administrators should be able to use the application as normal users without requiring a separate account or separate user-facing application.
+
+---
+
+## 2.4 Access Summary
+```
+                    Application
+                        │
+             ┌──────────┴──────────┐
+             │                     │
+       Public Features       Authenticated Features
+             │                     │
+       Everyone can use        User required
+                                   │
+                           ┌───────┴────────┐
+                           │                │
+                      User Features   Admin Features
+                                           │
+                                    permission required
+```
+
+| Functionality | Guest | Registered User | Administrator |
+| --- | :---: | :---: | :---: |
+| Browse recipes | ✓ | ✓ | ✓ |
+| Search recipes | ✓ | ✓ | ✓ |
+| View recipe details | ✓ | ✓ | ✓ |
+| Enter ingredients | ✓ | ✓ | ✓ |
+| Receive recipe recommendations | ✓ | ✓ | ✓ |
+| Apply filters | ✓ | ✓ | ✓ |
+| Generate shopping list | ✓ | ✓ | ✓ |
+| View ratings/reviews | ✓ | ✓ | ✓ |
+| Save ingredient inventory | — | ✓ | ✓ |
+| Save recipes | — | ✓ | ✓ |
+| Save shopping lists | — | ✓ | ✓ |
+| Save preferences/allergies | — | ✓ | ✓ |
+| Submit ratings/reviews | — | ✓ | ✓ |
+| Personalized dashboard | — | ✓ | ✓ |
+| Account/profile management | — | ✓ | ✓ |
+| Administrative dashboard | — | — | ✓ |
+| User/content management | — | — | ✓ |
 
 ---
 
@@ -49,9 +147,9 @@ An administrator has additional permissions for managing application content and
 
 ## FR-01 — User Registration
 
-The system shall allow users to create an account.
+The system shall allow guests to create an account.
 
-Account information shall be stored persistently and associated with the user's application data.
+Creating an account shall provide access to functionality requiring persistent user data.
 
 ---
 
@@ -61,9 +159,9 @@ The system shall allow registered users to:
 
 - Log in.
 - Log out.
-- Access protected functionality while authenticated.
+- Access account-specific functionality while authenticated.
 
-The system shall identify the currently authenticated user when accessing user-specific resources.
+The system shall identify the currently authenticated user when accessing account-specific resources.
 
 Users shall not be able to access another user's private data through modification of client requests.
 
@@ -71,7 +169,7 @@ Users shall not be able to access another user's private data through modificati
 
 ## FR-03 — User Profile
 
-The system shall allow registered users to maintain a user profile.
+The system shall allow registered users to maintain a profile.
 
 The profile may contain:
 
@@ -86,20 +184,20 @@ The exact visual representation of the logged-in user will be determined during 
 
 ---
 
-## FR-04 — Personalized User Interface
+## FR-04 — Authenticated User Interface
 
-The system shall provide an authenticated user interface for registered users.
+The system shall provide additional account-related interface functionality when a registered user is authenticated.
 
-When authenticated, the application shall recognize the current user and display appropriate account information within the interface.
-
-This may include:
+The application shall indicate that the user is currently authenticated using appropriate account information such as:
 
 - Display name.
 - Username.
 - Profile image/avatar.
 - Other supported account identifiers.
 
-The interface shall provide access to user-specific functionality and provide a method for the user to access account settings and log out.
+The exact presentation will be determined during UI/UX design.
+
+The authenticated interface shall provide access to account-specific functionality and a method for the user to log out.
 
 ---
 
@@ -107,38 +205,39 @@ The interface shall provide access to user-specific functionality and provide a 
 
 The system shall provide authenticated users with a personalized dashboard.
 
-The dashboard shall provide access to major user-specific functionality including:
+The dashboard shall provide access to persistent user information and functionality including:
 
+- Saved recipes.
+- Saved ingredient inventory.
+- Saved shopping lists.
 - Recipe recommendations.
-- Ingredient inventory.
-- Recipe search.
-- Shopping list.
 - User preferences.
+- Allergy settings.
 - Account settings.
 
-The dashboard may additionally display information such as:
+The dashboard may additionally display:
 
 - Recently viewed recipes.
 - Inventory summaries.
 - Suggested recipes.
 - Other relevant personalized information.
 
-The exact dashboard layout will be determined during UI/UX design.
-
 ---
 
-## FR-06 — Ingredient Inventory
+## FR-06 — Ingredient Input and Inventory
 
-The system shall allow authenticated users to maintain a personal inventory of available ingredients.
+The system shall allow both guests and registered users to provide ingredients they currently have available.
 
 Users shall be able to:
 
 - Add ingredients.
-- View ingredients.
-- Update ingredients.
+- View selected ingredients.
+- Update supported ingredient information.
 - Remove ingredients.
 
-Ingredient inventory information shall be associated with the authenticated user's account and stored persistently.
+For guests, ingredient information may exist only for the current session and is not required to persist after the session ends.
+
+For authenticated users, the system shall allow the ingredient information to be stored as a persistent personal inventory associated with their account.
 
 ---
 
@@ -165,7 +264,7 @@ A recipe shall be capable of containing:
 
 ## FR-08 — Recipe Creation
 
-Authorized users shall be able to manually create recipes.
+Authorized authenticated users shall be able to manually create recipes.
 
 Recipe creation shall support information including:
 
@@ -186,7 +285,7 @@ The system shall validate required recipe information before accepting a new rec
 
 ## FR-09 — Recipe Display
 
-The system shall provide an interface for viewing recipe information.
+Guests and registered users shall be able to view recipe information.
 
 Recipe pages should display relevant information such as:
 
@@ -207,7 +306,7 @@ Recipe pages should display relevant information such as:
 
 ## FR-10 — Recipe Search
 
-The system shall allow users to search available recipes.
+Guests and registered users shall be able to search available recipes.
 
 Search functionality should support relevant information such as:
 
@@ -221,7 +320,7 @@ Search functionality may be expanded as additional recipe metadata becomes avail
 
 ## FR-11 — Recipe Filtering
 
-The system shall allow recipes to be filtered using supported criteria.
+Guests and registered users shall be able to filter recipes using supported criteria.
 
 Filters may include:
 
@@ -234,86 +333,96 @@ Filters may include:
 - Preparation or cooking time.
 - Ingredient cost.
 
-Saved user preferences should automatically be applied where appropriate.
+Guests may manually select filters for their current session.
+
+Saved preferences belonging to authenticated users should automatically populate or apply supported filters where appropriate.
 
 ---
 
 ## FR-12 — Recipe Recommendation
 
-The system shall recommend recipes based primarily on ingredients available in the user's ingredient inventory.
+Guests and registered users shall be able to receive recipe recommendations based primarily on the ingredients they provide.
 
 The recommendation process should consider:
 
-- Ingredients the user currently has.
+- Ingredients currently available to the user.
 - Ingredients required by recipes.
 - Missing ingredients.
-- User allergies.
+- Allergy filters.
 - Dietary preferences.
 - Cuisine preferences.
 - User-selected filters.
 
-The system should prioritize recipes that make greater use of ingredients already available to the user.
+The system should prioritize recipes that make greater use of ingredients the user already possesses.
 
 The initial recommendation system does not require artificial intelligence.
 
 ---
 
-## FR-13 — Allergy Management
+## FR-13 — Allergy and Dietary Filtering
 
-The system shall allow registered users to record supported food allergies.
+Guests shall be able to provide supported allergy and dietary filters when searching for or requesting recipe recommendations.
 
-Saved allergy information shall automatically be considered when providing personalized recipe recommendations and filtering.
+Authenticated users shall additionally be able to save supported allergies and dietary preferences to their accounts.
 
-Recipes containing ingredients known by the system to conflict with a user's recorded allergies shall be excluded from normal personalized recommendations or clearly identified according to the application's filtering rules.
+Saved preferences should automatically apply to recipe recommendations and filtering where appropriate.
+
+Recipes containing ingredients known by the system to conflict with selected allergy filters shall be excluded from normal recommendations or clearly identified according to the application's filtering rules.
 
 The application shall not represent its allergy filtering as a substitute for professional medical or food-safety guidance.
 
 ---
 
-## FR-14 — Dietary Preferences
+## FR-14 — Saved Recipes
 
-The system shall allow registered users to maintain supported dietary preferences.
+Authenticated users shall be able to save recipes to their accounts.
 
-Examples may include:
+Users shall be able to:
 
-- Vegan.
-- Vegetarian.
-- Halal.
-- Other supported dietary classifications.
+- Save a recipe.
+- View saved recipes.
+- Remove a recipe from their saved recipes.
 
-Saved dietary preferences should automatically affect personalized recipe filtering and recommendations where applicable.
+Saved recipe information shall persist across authenticated sessions.
+
+Guest users are not required to have persistent saved recipe functionality.
 
 ---
 
 ## FR-15 — Recipe Reviews and Ratings
 
-Authenticated users shall be able to submit reviews for recipes.
+Guests shall be able to view recipe ratings and reviews.
+
+Authenticated users shall be able to submit recipe ratings and reviews.
 
 A review shall contain or reference:
 
-- The associated user.
+- The associated authenticated user.
 - The associated recipe.
 - A rating.
 - An optional written comment.
 - A creation date.
 
-The system shall be capable of displaying rating information derived from submitted reviews.
+Requiring authentication for review creation ensures that submitted reviews can be associated with an identifiable application account.
 
 ---
 
 ## FR-16 — Shopping List
 
-The system shall allow authenticated users to maintain a personal shopping list.
+Guests and authenticated users shall be able to generate a shopping list based on ingredients they are missing for selected recipes.
 
-When viewing a recipe, the system should be capable of comparing the recipe's required ingredients against the user's ingredient inventory.
+The system should compare required recipe ingredients against the ingredients currently provided by the user.
 
-The system should identify ingredients required by the recipe that are not currently recorded in the user's inventory.
+The system should identify ingredients required by the recipe that the user does not currently have.
 
-Users shall be able to add missing ingredients to their shopping list.
+Guests shall be able to use a generated shopping list during their current session.
 
-Users shall be able to:
+Authenticated users shall additionally be able to persist and manage shopping lists across sessions.
 
-- View shopping list items.
+Authenticated users shall be able to:
+
+- Save shopping lists.
+- View saved shopping lists.
 - Add shopping list items.
 - Update supported shopping list information.
 - Remove shopping list items.
@@ -359,7 +468,7 @@ Administrative functionality may include:
 - Review management.
 - Application content management.
 
-Administrative functionality shall not be accessible to normal registered users.
+Administrative functionality shall not be accessible to normal registered users or guests.
 
 ---
 
@@ -367,19 +476,15 @@ Administrative functionality shall not be accessible to normal registered users.
 
 The system shall provide users with a method for submitting questions, feedback, or support requests.
 
-Support submissions should contain sufficient information for administrators or project members to review the request.
-
 ---
 
 # 4. Potential / Future Requirements
 
-The following functionality is being considered but is **not currently required for the core application**.
-
-Implementation will depend on project progress, available resources, and technical feasibility.
+The following functionality is being considered but is not currently required for the core application.
 
 ## FUT-01 — AI-Generated Recipes
 
-The system may allow users to generate recipes based on available ingredients and user-provided instructions using an AI service.
+The system may allow users to generate new recipes based on available ingredients and user-provided instructions using an AI service.
 
 ## FUT-02 — AI Recipe Assistant
 
@@ -391,7 +496,7 @@ The system may allow users to upload or scan recipe information and automaticall
 
 ## FUT-04 — Advanced Ingredient Tracking
 
-The ingredient inventory may eventually support additional information such as:
+The persistent ingredient inventory may eventually support additional information such as:
 
 - Quantity.
 - Measurement units.
@@ -400,7 +505,7 @@ The ingredient inventory may eventually support additional information such as:
 
 ## FUT-05 — Advanced Interface Customization
 
-Users may eventually be able to customize additional aspects of the application interface.
+Authenticated users may eventually be able to customize additional aspects of the application interface.
 
 ## FUT-06 — Advanced Recommendation Features
 
@@ -524,7 +629,7 @@ The application shall:
 
 Persistent application data shall remain available independently of individual backend container deployments, restarts, or replacements.
 
-Failure of optional functionality should not prevent users from accessing the application's core recipe, inventory, account, and recommendation functionality.
+Failure of optional functionality should not prevent users from accessing the application's core recipe discovery functionality.
 
 ---
 
@@ -538,18 +643,18 @@ Recipe search and recommendation operations should avoid unnecessary processing,
 
 ## NFR-10 — Usability
 
-The application should provide an interface that allows users to perform common tasks with minimal unnecessary interaction.
+The application's core recipe discovery workflow should not require account creation.
 
 Primary workflows such as:
 
-- Adding ingredients.
+- Entering available ingredients.
 - Finding recipes.
 - Viewing recommendations.
-- Managing shopping lists.
+- Generating a shopping list.
 
 should be easy to locate and use.
 
-The interface should provide clear feedback for user actions, loading states, errors, and successful operations where appropriate.
+Account creation should primarily provide persistence, personalization, and functionality that requires user identity.
 
 ---
 
@@ -586,36 +691,72 @@ Business logic should not be unnecessarily coupled to frontend presentation or c
 
 ---
 
-# 6. Core Project Scope
+# 6. Core User Flow
 
-The initial implementation will prioritize:
+The primary application workflow shall be accessible to both guests and authenticated users.
 
-1. User registration and authentication.
-2. Logged-in user interface.
-3. Personalized user dashboard.
-4. User profile and preferences.
-5. Allergy and dietary preference management.
-6. Ingredient inventory management.
-7. Recipe storage and display.
-8. Manual recipe creation.
-9. Recipe search and filtering.
-10. Ingredient-based recipe recommendations.
-11. Reviews and ratings.
-12. Shopping list management.
-13. Recipe and user media support.
-14. Basic administrative functionality.
+```text id="l03rzt"
+Open Application
+       │
+       ▼
+Enter Available Ingredients
+       │
+       ├── Select Allergies / Preferences / Filters
+       │
+       ▼
+Get Recipe Recommendations
+       │
+       ▼
+View Recipe
+       │
+       ├── View Required Ingredients
+       ├── View Missing Ingredients
+       └── View Instructions
+       │
+       ▼
+Generate Shopping List
+```
 
-AI functionality, recipe scanning, advanced inventory tracking, advanced interface customization, and other intelligent features are outside the committed initial scope.
+Authentication extends this workflow with persistent functionality:
+
+```text id="twm0ml"
+Guest Experience
+       │
+       ▼
+Create Account / Log In
+       │
+       ▼
+Persistent User Experience
+       │
+       ├── Saved Ingredient Inventory
+       ├── Saved Recipes
+       ├── Saved Shopping Lists
+       ├── Saved Preferences / Allergies
+       ├── Reviews / Ratings
+       └── Personalized Dashboard
+```
 
 ---
 
-# 7. Requirement Priority
+# 7. Core Project Scope
 
-Requirements may be prioritized during development according to the following categories:
+The initial implementation will prioritize:
 
-- **Core:** Required for the primary application workflow.
-- **Supporting:** Required to support the overall user experience or system operation.
-- **Extended:** Valuable functionality that may be implemented after core functionality is operational.
-- **Future:** Functionality under consideration but not currently committed.
+1. Recipe browsing and display.
+2. Ingredient input for guests and authenticated users.
+3. Ingredient-based recipe recommendations.
+4. Recipe search and filtering.
+5. Allergy and dietary filtering.
+6. Shopping list generation.
+7. User registration and authentication.
+8. Persistent ingredient inventory for authenticated users.
+9. Saved recipes.
+10. Persistent shopping lists.
+11. User profile and saved preferences.
+12. Personalized authenticated dashboard.
+13. Reviews and ratings.
+14. Manual recipe creation.
+15. Recipe and user media support.
+16. Basic administrative functionality.
 
-The project scope may be adjusted based on development progress, course requirements, technical feasibility, and available project resources.
+AI functionality, recipe scanning, advanced inventory tracking, advanced interface customization, and other intelligent features are outside the committed initial scope.
