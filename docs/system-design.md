@@ -521,7 +521,12 @@ The recommendation service should receive a consistent input structure such as:
 
 ```text
 RecommendationInput
+│
 ├── ingredients
+├── match_mode
+│      ├── AVAILABLE_ONLY
+│      └── PARTIAL_MATCH
+│
 ├── allergies
 ├── dietary_preferences
 ├── cuisine_filters
@@ -589,38 +594,7 @@ For example, hiding an Admin button in React does not replace backend permission
 
 ---
 
-# 11. Recommendation Architecture
-
-The initial recommendation system shall not depend on artificial intelligence.
-
-Conceptually:
-
-```text
-Available Ingredients
-        +
-Selected Filters
-        +
-Allergies / Preferences
-        │
-        ▼
-Recommendation Service
-        │
-        ├── Filter incompatible recipes
-        ├── Compare recipe ingredients
-        ├── Determine missing ingredients
-        └── Calculate recommendation score
-        │
-        ▼
-Ranked Recipe Results
-```
-
-The recommendation logic should remain sufficiently separated from presentation and infrastructure code so that the algorithm can be modified later.
-
-Future AI functionality may supplement this system but should not be required for core recipe recommendations.
-
----
-
-# 12. Media Architecture
+# 11. Media Architecture
 
 Application media shall not be stored inside backend containers.
 
@@ -639,6 +613,442 @@ Recipe
 This ensures media remains persistent independently of backend container deployment and scaling.
 
 Detailed AWS media architecture is documented in `aws-architecture.md`.
+
+---
+
+# 12. Recommendation Architecture
+
+## 12.1 Overview
+
+Recipe recommendations shall be handled by a shared `RecommendationService`.
+
+The recommendation service shall operate independently of whether ingredient information originates from a Guest or an authenticated Registered User.
+
+```text id="m6sbpe"
+Guest Ingredients ───────────┐
+                             │
+                             ▼
+                    RecommendationService
+                             ▲
+                             │
+Saved User Inventory ────────┘
+```
+
+Both sources shall be converted into a common recommendation input before recommendation logic is performed.
+
+---
+
+## 12.2 Recommendation Input
+
+Conceptually, the recommendation service receives input similar to:
+
+```text id="50fn0r"
+RecommendationInput
+│
+├── ingredients
+│
+├── match_mode
+│   ├── AVAILABLE_ONLY
+│   └── PARTIAL_MATCH
+│
+├── allergies
+├── dietary_preferences
+├── cuisine_filters
+└── other_filters
+```
+
+The exact implementation of `RecommendationInput` may be a class, serializer, data structure, or other appropriate abstraction.
+
+The important architectural requirement is that the recommendation service receives a consistent representation regardless of whether the request originates from a Guest or Registered User.
+
+---
+
+## 12.3 Ingredient Resolution
+
+User-provided ingredients shall be resolved to standardized application ingredients before recipe matching is performed.
+
+For example:
+
+```text id="nzdh9g"
+User Input
+"Tyson Frozen Chicken Breast"
+             │
+             ▼
+     Ingredient Resolution
+             │
+             ▼
+Canonical Ingredient
+      "Chicken Breast"
+             │
+             ▼
+   RecommendationService
+```
+
+Product-specific information such as brand or storage condition should not normally create a separate canonical ingredient when the underlying food is equivalent for recipe matching.
+
+For example:
+
+```text id="mk2ucq"
+Tyson Frozen Chicken Breast ──┐
+                              │
+Kirkland Chicken Breast ──────┼──→ Chicken Breast
+                              │
+Fresh Chicken Breast ─────────┘
+```
+
+Distinct ingredients that may materially affect recipe usage should remain separate.
+
+For example:
+
+```text id="o2bikf"
+Chicken Breast
+Chicken Thigh
+Ground Chicken
+Whole Chicken
+```
+
+These should not automatically be treated as the same canonical ingredient.
+
+---
+
+## 12.4 Mode 1 — Available Ingredients Only
+
+`AVAILABLE_ONLY` mode returns recipes that the user can prepare using only ingredients currently available to them.
+
+A recipe is eligible when every **required** recipe ingredient is contained within the user's available ingredients.
+
+Conceptually:
+
+```text id="0uwz21"
+Required Recipe Ingredients ⊆ User Ingredients
+```
+
+Example:
+
+```text id="uf61no"
+User Ingredients:
+
+Egg
+Cabbage
+Soy Sauce
+Kimchi
+```
+
+The following recipes qualify:
+
+```text id="qz31ny"
+Recipe A
+Egg
+Soy Sauce
+✓ Eligible
+
+
+Recipe B
+Egg
+Cabbage
+Kimchi
+✓ Eligible
+
+
+Recipe C
+Egg
+✓ Eligible
+```
+
+The following does not qualify:
+
+```text id="e7y0xb"
+Recipe D
+Egg
+Rice
+
+✗ Not Eligible
+
+Missing: Rice
+```
+
+The recipe is not required to use every ingredient the user has.
+
+Therefore:
+
+```text id="5h6zw9"
+User = {Egg, Cabbage, Soy Sauce, Kimchi}
+
+{Egg}                         ✓
+{Egg, Soy Sauce}              ✓
+{Egg, Cabbage, Kimchi}        ✓
+{Egg, Cabbage, Soy, Kimchi}   ✓
+
+{Egg, Rice}                   ✗
+{Kimchi, Pork}                ✗
+```
+
+This mode answers the user question:
+
+> "What can I make right now without buying additional required ingredients?"
+
+---
+
+## 12.5 Optional Ingredients
+
+Optional recipe ingredients shall not prevent a recipe from qualifying for `AVAILABLE_ONLY` mode.
+
+For example:
+
+```text id="pdxctc"
+Recipe: Simple Omelette
+
+Required:
+✓ Egg
+✓ Salt
+
+Optional:
+✗ Green Onion
+```
+
+If the user has Egg and Salt but does not have Green Onion, the recipe may still qualify.
+
+Conceptually:
+
+```text id="rl45cb"
+Required Ingredients ⊆ User Ingredients
+
+Optional Ingredients
+        ↓
+Do not determine eligibility
+```
+
+The `RecipeIngredient` relationship should therefore support distinguishing required and optional ingredients.
+
+---
+
+## 12.6 Mode 2 — Partial Ingredient Match
+
+`PARTIAL_MATCH` mode returns recipes that use at least one ingredient currently available to the user, even when additional ingredients are required.
+
+Conceptually:
+
+```text id="1sqfhe"
+Required Recipe Ingredients ∩ User Ingredients ≠ ∅
+```
+
+Example:
+
+```text id="2wpbd1"
+User Ingredients:
+
+Egg
+Cabbage
+Soy Sauce
+Kimchi
+```
+
+A recipe may qualify even when some ingredients are missing:
+
+```text id="6lb5jg"
+Kimchi Fried Rice
+
+Available:
+✓ Kimchi
+✓ Egg
+✓ Soy Sauce
+
+Missing:
+✗ Rice
+✗ Green Onion
+✗ Sesame Oil
+
+→ Eligible
+```
+
+The recommendation service should rank eligible recipes according to how well they use ingredients already available to the user.
+
+---
+
+## 12.7 Ingredient Match Score
+
+The initial recommendation system may calculate a simple ingredient match score.
+
+A possible initial score is:
+
+```text id="z4sd62"
+Match Score = Number of Required Ingredients Available
+              ----------------------------------------
+                Total Required Recipe Ingredients
+```
+
+For example:
+
+```text id="fsc6tf"
+Recipe requires:
+
+Egg
+Rice
+Kimchi
+Soy Sauce
+Green Onion
+
+User has:
+
+Egg
+Kimchi
+Soy Sauce
+```
+
+Therefore:
+
+```text id="kxb8ns"
+Available Required Ingredients = 3
+Total Required Ingredients     = 5
+
+Match Score = 3 / 5
+            = 60%
+```
+
+This initial scoring method is intentionally simple and may be refined later.
+
+The recommendation architecture should allow scoring algorithms to change without requiring significant changes to the API or frontend.
+
+---
+
+## 12.8 Recommendation Processing
+
+The recommendation process conceptually follows:
+
+```text id="9wdijg"
+Ingredient Input
+      │
+      ▼
+Ingredient Resolution
+      │
+      ▼
+Canonical Ingredients
+      │
+      ├───────────────┐
+      │               │
+      ▼               ▼
+User Filters      Match Mode
+      │               │
+      └───────┬───────┘
+              ▼
+     RecommendationService
+              │
+              ▼
+     Apply Safety/Preference
+            Filters
+              │
+              ▼
+        Match Recipes
+              │
+              ▼
+       Calculate Missing
+          Ingredients
+              │
+              ▼
+          Score / Rank
+              │
+              ▼
+    Recommendation Results
+```
+
+Allergy and dietary filtering should occur before or as part of determining final eligible recommendations.
+
+---
+
+## 12.9 Recommendation Result
+
+The recommendation service should return sufficient information for the frontend to explain the recommendation to the user.
+
+Conceptually:
+
+```text id="t4jz8v"
+RecommendationResult
+│
+├── recipe
+├── match_score
+├── available_ingredients
+├── missing_ingredients
+└── optional_missing_ingredients
+```
+
+For example:
+
+```text id="j6y6cb"
+Kimchi Fried Rice
+
+Match: 60%
+
+You Have:
+✓ Egg
+✓ Kimchi
+✓ Soy Sauce
+
+You Need:
+✗ Rice
+✗ Green Onion
+
+Optional:
+○ Sesame Seeds
+```
+
+This information can be used directly by the frontend and shopping-list functionality.
+
+---
+
+## 12.10 Shopping List Integration
+
+Missing ingredients identified by the recommendation system should use the same canonical `Ingredient` entities used throughout the application.
+
+This allows missing ingredients to be passed to the shopping-list functionality without performing a second ingredient-matching process.
+
+```text id="5sdfr9"
+RecommendationService
+
+Missing Ingredients
+        │
+        ├── Rice
+        ├── Green Onion
+        └── Sesame Oil
+              │
+              ▼
+      ShoppingListService
+```
+
+For Guests, the resulting shopping list may remain temporary.
+
+For authenticated users, the resulting shopping list may be persisted to their account.
+
+---
+
+## 12.11 Service Independence
+
+`RecommendationService` should not be responsible for:
+
+- Authentication.
+- User login.
+- Rendering React components.
+- HTTP response formatting.
+- AWS infrastructure.
+- Persisting shopping lists.
+- Managing user accounts.
+
+Its primary responsibility is to evaluate recipes against normalized ingredient and filter information and produce recommendation results.
+
+Conceptually:
+
+```text id="fznzj5"
+                 RecommendationService
+
+INPUT                                  OUTPUT
+
+Ingredients ───────────────┐           Recipe
+Match Mode ────────────────┤           Match Score
+Allergies ─────────────────┼───→       Available Ingredients
+Dietary Preferences ───────┤           Missing Ingredients
+Filters ───────────────────┘           Optional Ingredients
+```
+
+This keeps recommendation logic reusable, testable, and independent from presentation and infrastructure concerns.
 
 ---
 

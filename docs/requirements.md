@@ -341,21 +341,107 @@ Saved preferences belonging to authenticated users should automatically populate
 
 ## FR-12 — Recipe Recommendation
 
-Guests and registered users shall be able to receive recipe recommendations based primarily on the ingredients they provide.
+Guests and registered users shall be able to receive recipe recommendations based on the ingredients they provide.
 
-The recommendation process should consider:
+The recommendation system shall support at least two ingredient matching modes.
 
-- Ingredients currently available to the user.
-- Ingredients required by recipes.
-- Missing ingredients.
-- Allergy filters.
-- Dietary preferences.
-- Cuisine preferences.
-- User-selected filters.
+### Mode 1 — Available Ingredients Only
 
-The system should prioritize recipes that make greater use of ingredients the user already possesses.
+The system shall provide a mode that returns recipes whose required ingredients are entirely contained within the ingredients currently available to the user.
 
-The initial recommendation system does not require artificial intelligence.
+A recipe is eligible when all required ingredients for the recipe are available to the user.
+
+The recipe is not required to use every ingredient available to the user.
+
+Conceptually:
+
+```text id="xrbjke"
+Recipe Ingredients ⊆ User Ingredients
+```
+
+Example:
+
+```text id="9k5s21"
+User Ingredients:
+
+Egg
+Cabbage
+Soy Sauce
+Kimchi
+
+
+Recipe A:
+Egg
+Soy Sauce
+→ Eligible
+
+
+Recipe B:
+Egg
+Cabbage
+Kimchi
+→ Eligible
+
+
+Recipe C:
+Egg
+Rice
+→ Not Eligible
+```
+
+This mode allows users to find recipes they can prepare without requiring additional ingredients.
+
+### Mode 2 — Partial Ingredient Match
+
+The system shall provide a mode that returns recipes using one or more ingredients currently available to the user, even when the recipe requires additional ingredients.
+
+Conceptually:
+
+```text id="v3q1nd"
+Recipe Ingredients ∩ User Ingredients ≠ ∅
+```
+
+Recipes should be ranked according to how well they match the user's available ingredients.
+
+The system should provide information indicating:
+
+- Ingredients the user already has.
+- Ingredients the user is missing.
+- Ingredient match information or score.
+
+For example:
+
+```text id="3i0r8k"
+Kimchi Fried Rice
+
+Available:
+✓ Kimchi
+✓ Egg
+✓ Soy Sauce
+
+Missing:
+✗ Rice
+✗ Green Onion
+✗ Sesame Oil
+```
+
+Missing ingredients should be usable by the shopping-list functionality.
+
+### Shared Recommendation Logic
+
+Both Guest ingredient selections and authenticated users' saved inventories shall use the same recommendation logic.
+
+```text id="cq8ph5"
+Guest Ingredients ──────────┐
+                            │
+                            ▼
+                   RecommendationService
+                            ▲
+                            │
+Saved User Inventory ───────┘
+```
+
+Additional filters such as allergies, dietary preferences, cuisine preferences, and other supported filters shall be applicable to both recommendation modes.
 
 ---
 
