@@ -92,14 +92,14 @@ The application will be deployed using Amazon Web Services (AWS).
 | --- | --- |
 | Cloud Platform | AWS |
 | Frontend | React |
-| Frontend Hosting | AWS |
+| Frontend Hosting | Amazon S3 + CloudFront |
 | Backend | Django + Django REST Framework |
 | Backend Deployment | Docker containers on AWS |
-| Database | PostgreSQL |
-| Media Storage | AWS S3|
+| Database | PostgreSQL on Amazon RDS |
+| Media Storage | Amazon S3 |
+| Authentication | Amazon Cognito |
 | API | REST |
 | Version Control | Git / GitHub |
-| Authentication | TBD |
 
 Detailed AWS infrastructure and deployment decisions are documented separately in the system design and AWS architecture documentation.
 
@@ -135,7 +135,7 @@ The main README provides a high-level overview of the project, while the documen
 The planned repository structure is:
 
 ```text
-recipe-app/
+cloud_computing_proj/
 ├── README.md
 ├── docs/
 ├── backend/
