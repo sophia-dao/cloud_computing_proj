@@ -10,55 +10,91 @@ The core recipe discovery functionality shall be available without requiring an 
 
 This document defines **what the system is expected to do**. Implementation and architectural details are documented separately in the system design and AWS architecture documentation.
 
-## System Design Requirements
+---
+## 1a. System Design Requirements
 
 ### Scalability
 
-The system must be designed so that increased application traffic and data volume can be handled without requiring major architectural changes.
+The system must be designed to support increased application traffic and data volume without requiring major architectural changes.
 
-The architecture should support:
+The system should support:
 
 - Stateless backend API instances where practical.
-- Horizontal scaling of the backend.
+- Horizontal scaling of the Django backend.
 - Independent scaling of frontend, backend, database, and media storage.
-- Efficient database queries and indexing.
 - Pagination for APIs that may return large datasets.
-- Caching where appropriate.
+- Appropriate database indexing.
+- Efficient database access and avoidance of unnecessary queries.
 - Cloud-based object storage for uploaded media.
-- Load testing and performance measurement.
-- Monitoring of system resource utilization and application performance.
+- Load balancing when multiple backend instances are deployed.
+- Monitoring of application and infrastructure performance.
+- Load and performance testing using measurable statistics.
 
-Scalability claims must be supported by measurable testing results rather than architecture alone.
+Scalability claims must be supported by measured results.
 
-Example measurements may include:
+Metrics should include, where applicable:
 
-- Requests per second
 - Concurrent users
+- Requests per second
 - Average response time
 - p95 response time
 - Error rate
 - CPU utilization
 - Memory utilization
-- Database query performance
+- Database/query performance
+
+The final system documentation should include load-testing results and analysis.
 
 ### Security
 
-The system must follow secure design principles across authentication, authorization, data storage, API communication, and cloud infrastructure.
+The system must follow secure design principles across authentication, authorization, API communication, data storage, and AWS infrastructure.
 
-The architecture should include:
+The system should include:
 
-- Amazon Cognito for authentication.
+- Amazon Cognito for user authentication.
 - Backend authorization and ownership validation.
 - HTTPS for production communication.
-- Secure credential and secret management.
-- Input validation on backend APIs.
-- Protection against unauthorized resource access.
-- Appropriate AWS IAM permissions following least-privilege principles.
-- Private/protected database access.
-- Secure media upload and access controls.
+- Backend input validation.
+- Secure management of credentials and secrets.
+- AWS IAM permissions following the principle of least privilege.
+- Restricted database network access.
+- Secure media storage and access controls.
 - Environment-specific configuration.
-- Logging and monitoring of important application/system events.
-- No credentials, tokens, or secrets committed to source control.
+- Logging and monitoring of important application and infrastructure events.
+- Protection against unauthorized access to user-specific resources.
+- No credentials, passwords, tokens, or secrets committed to source control.
+
+Security controls must be enforced by the backend and infrastructure rather than relying only on frontend behavior.
+
+### Security Validation
+
+Security behavior should be tested.
+
+Examples include:
+
+```text
+Guest
+→ Public Recipe
+✓ Allowed
+
+Guest
+→ User Inventory
+✗ Rejected
+
+User A
+→ User A Inventory
+✓ Allowed
+
+User A
+→ User B Inventory
+✗ Rejected
+
+Invalid / Expired Token
+→ Protected API
+✗ Rejected
+```
+
+The final documentation should describe the security architecture and provide evidence that major authorization controls were tested.
 
 ---
 
