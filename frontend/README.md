@@ -118,9 +118,9 @@ These should remain consistent with the backend API contract.
 
 ### `services/`
 
-Communication with the backend and other external services.
+Handles communication with the backend and other external services.
 
-For example:
+The frontend uses a **centralized API client with domain-specific service files**.
 
 ```text
 services/api/
@@ -128,10 +128,36 @@ services/api/
 ├── ingredientService.js
 ├── recipeService.js
 ├── inventoryService.js
-└── recommendationService.js
+├── recommendationService.js
+└── userService.js
 ```
 
-React components should use these services instead of duplicating API request code throughout the application.
+`apiClient.js` is responsible for shared HTTP behavior such as:
+
+- API base URL
+- HTTP methods
+- Common headers
+- JSON serialization/deserialization
+- Common error handling
+- Authentication headers when Cognito is integrated
+
+Feature/domain services are responsible for defining calls to their corresponding backend APIs.
+
+For example:
+
+```text
+Component
+    ↓
+ingredientService
+    ↓
+apiClient
+    ↓
+Django REST API
+```
+
+Components should **not call `fetch()` directly**.
+
+Domain services should use the shared `apiClient` rather than implementing their own HTTP configuration.
 
 ---
 
@@ -235,6 +261,8 @@ When contributing to the frontend:
 10. Run the linter before submitting changes.
 11. Avoid introducing unnecessary dependencies.
 12. Discuss major architecture changes before implementing them.
+13. Use `apiClient.js` for all backend HTTP communication.
+14. Create domain-specific API services rather than placing all API endpoints in one file.
 
 ---
 
@@ -253,6 +281,9 @@ Do not:
 - Modify unrelated features while completing an assigned task.
 - Commit `.env`, `node_modules/`, or generated build files.
 - Push feature development directly to `main`.
+- Call `fetch()` directly from React components
+- Create a second shared API client
+- Put every backend endpoint into `apiClient.js`
 
 Client-side validation may still be used to improve user experience, but the backend remains responsible for authoritative validation and business rules.
 
