@@ -276,3 +276,17 @@ If your implementation would change:
 - A module owned by another teammate.
 
 Discuss the change with the team/project manager before implementing it.
+
+## Security and Scalability
+
+Security and scalability are system requirements, not optional final-stage improvements.
+
+When implementing a feature:
+
+- Enforce authentication and ownership on the backend where required.
+- Validate external input.
+- Avoid unnecessary database queries and N+1 query patterns.
+- Use pagination for potentially large result sets.
+- Consider database indexes for frequently queried fields.
+- Do not store application state in a way that prevents multiple backend instances from serving requests.
+- Do not introduce secrets or credentials into source code.
