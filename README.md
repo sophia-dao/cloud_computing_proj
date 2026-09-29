@@ -1,4 +1,13 @@
 # Recipe Suggestion App
+```mermaid
+flowchart LR
+    A["Sep 4, 2026<br><b>Project Proposal</b>"]
+    B["Oct 16, 2026<br><b>Midpoint Evaluation</b>"]
+    C["Nov 13, 2026<br><b>Final Documentation & Presentation</b>"]
+
+    A -->|"Development & Implementation"| B
+    B -->|"Testing, Documentation & Presentation Preparation"| C
+```
 
 ## Overview
 
