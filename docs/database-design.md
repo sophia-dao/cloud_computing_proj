@@ -1228,7 +1228,135 @@ The initial recommendation implementation supports:
 
 ---
 
-# 23. Related Documentation
+# 23. ## Recipe Classification and Tags
+
+Recipes use a flexible tag-based classification system.
+
+A `Tag` represents descriptive properties of a recipe such as cuisine, dietary classification, cost level, or other useful categories.
+
+### Tag
+
+```text
+Tag
+├── id
+├── name
+└── type
+```
+
+Initial tag types:
+
+```text
+DIET
+CUISINE
+COST
+OTHER
+```
+
+Examples:
+
+| Name | Type |
+|---|---|
+| Vegan | DIET |
+| Vegetarian | DIET |
+| Halal | DIET |
+| Korean | CUISINE |
+| Vietnamese | CUISINE |
+| Italian | CUISINE |
+| Cheap | COST |
+| Moderate | COST |
+| Expensive | COST |
+| Quick | OTHER |
+| High Protein | OTHER |
+
+Recipes and Tags have a many-to-many relationship:
+
+```text
+Recipe
+   │
+   │ M:N
+   ▼
+Tag
+```
+
+Example:
+
+```text
+Kimchi Fried Rice
+
+Tags:
+- Korean
+- Halal
+- Cheap
+- Quick
+```
+
+This allows additional classifications to be introduced without modifying the Recipe model for every new category.
+
+---
+
+## Allergens
+
+Allergens are associated with canonical Ingredients rather than represented only as Recipe tags.
+
+```text
+Ingredient
+    │
+    │ M:N
+    ▼
+Allergen
+```
+
+Examples:
+
+```text
+Peanut  → Peanut
+Shrimp  → Shellfish
+Milk    → Dairy
+```
+
+A recipe's allergen information can therefore be determined through its ingredients:
+
+```text
+Recipe
+   ↓
+RecipeIngredient
+   ↓
+Ingredient
+   ↓
+Allergen
+```
+
+User allergies can be compared against these allergens when filtering recipes.
+
+This avoids relying on manually assigned labels such as `Peanut-Free` as the authoritative source of allergy information.
+
+---
+
+## Recipe Classification Relationship
+
+The resulting structure is:
+
+```text
+                       Recipe
+                      /      \
+                     /        \
+                    ▼          ▼
+           RecipeIngredient    Tag
+                    │           │
+                    ▼           ├── DIET
+               Ingredient       ├── CUISINE
+                    │           ├── COST
+                    ▼           └── OTHER
+                Allergen
+```
+
+Recipe tags describe recipe characteristics.
+
+Ingredient allergens provide structured information for allergy filtering.
+
+---
+
+# 24. Related Documentation
 
 ```text
 
