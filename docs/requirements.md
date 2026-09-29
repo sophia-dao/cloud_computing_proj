@@ -10,6 +10,56 @@ The core recipe discovery functionality shall be available without requiring an 
 
 This document defines **what the system is expected to do**. Implementation and architectural details are documented separately in the system design and AWS architecture documentation.
 
+## System Design Requirements
+
+### Scalability
+
+The system must be designed so that increased application traffic and data volume can be handled without requiring major architectural changes.
+
+The architecture should support:
+
+- Stateless backend API instances where practical.
+- Horizontal scaling of the backend.
+- Independent scaling of frontend, backend, database, and media storage.
+- Efficient database queries and indexing.
+- Pagination for APIs that may return large datasets.
+- Caching where appropriate.
+- Cloud-based object storage for uploaded media.
+- Load testing and performance measurement.
+- Monitoring of system resource utilization and application performance.
+
+Scalability claims must be supported by measurable testing results rather than architecture alone.
+
+Example measurements may include:
+
+- Requests per second
+- Concurrent users
+- Average response time
+- p95 response time
+- Error rate
+- CPU utilization
+- Memory utilization
+- Database query performance
+
+### Security
+
+The system must follow secure design principles across authentication, authorization, data storage, API communication, and cloud infrastructure.
+
+The architecture should include:
+
+- Amazon Cognito for authentication.
+- Backend authorization and ownership validation.
+- HTTPS for production communication.
+- Secure credential and secret management.
+- Input validation on backend APIs.
+- Protection against unauthorized resource access.
+- Appropriate AWS IAM permissions following least-privilege principles.
+- Private/protected database access.
+- Secure media upload and access controls.
+- Environment-specific configuration.
+- Logging and monitoring of important application/system events.
+- No credentials, tokens, or secrets committed to source control.
+
 ---
 
 # 2. User Roles and Access Model
