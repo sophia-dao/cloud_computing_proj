@@ -6,7 +6,9 @@ For complete system architecture and requirements, see the documentation under [
 
 ## Backend Structure
 
-The backend follows a **modular, object-oriented architecture**. Major application domains are separated into Django apps, while business logic is kept separate from API and database concerns.
+The backend follows a **modular, object-oriented architecture**.
+
+Major application domains are separated into Django apps, while business logic is kept separate from API and database concerns.
 
 ```text
 backend/
@@ -19,9 +21,9 @@ backend/
 │
 ├── apps/                       # Application domain modules
 │   ├── users/                  # Profiles, preferences, allergies
-│   ├── ingredients/            # Canonical ingredient data
-│   ├── inventory/              # User ingredient inventory
-│   ├── recipes/                # Recipes and recipe ingredients
+│   ├── ingredients/            # Canonical Ingredient data
+│   ├── inventory/              # User Ingredient inventory
+│   ├── recipes/                # Recipes and RecipeIngredients
 │   ├── recommendations/        # Recipe matching/recommendation logic
 │   ├── reviews/                # Recipe reviews and ratings
 │   └── shopping/               # Shopping lists and list items
@@ -57,7 +59,9 @@ apps/recipes/
 └── tests/
 ```
 
-Not every app must contain every file. Add files only when the module requires them.
+Not every app must contain every file.
+
+Add files only when the module requires them.
 
 ### Responsibilities
 
@@ -126,8 +130,49 @@ RecommendationService
         │
         ├── Ingredient data
         ├── Recipe data
-        └── User preferences
+        ├── Tag preferences
+        └── Allergen data
 ```
+
+---
+
+## Canonical Domain Data
+
+Three standardized concepts are reused throughout the backend:
+
+```text
+Ingredient
+    What food or ingredient is this?
+
+Tag
+    How is a Recipe or User preference classified?
+
+Allergen
+    What structured allergy relationship exists?
+```
+
+Examples:
+
+```text
+Ingredient
+├── Chicken Breast
+├── Egg
+└── White Rice
+
+Tag
+├── Halal       [DIET]
+├── Vietnamese  [CUISINE]
+├── Cheap       [COST]
+└── Quick       [OTHER]
+
+Allergen
+├── Peanut
+├── Milk
+├── Soy
+└── Shellfish
+```
+
+These concepts should not be treated as interchangeable.
 
 ---
 
@@ -137,14 +182,27 @@ RecommendationService
 
 Responsible for:
 
-- Application user records.
+- Application User records.
 - User profiles.
-- Dietary preferences.
-- Allergies.
-- Onboarding information.
+- Tag-based User preferences.
+- User allergies.
+- Optional onboarding information.
 - Application roles and permissions.
+- Mapping authenticated Cognito identities to application Users.
+
+Conceptually:
+
+```text
+User
+ │
+ ├── UserProfile
+ ├── UserPreference ──→ Tag
+ └── UserAllergy ─────→ Allergen
+```
 
 Authentication itself is provided by **Amazon Cognito**.
+
+Django remains responsible for application authorization.
 
 ---
 
@@ -152,10 +210,11 @@ Authentication itself is provided by **Amazon Cognito**.
 
 Responsible for:
 
-- Canonical ingredients.
+- Canonical Ingredients.
 - Ingredient normalization/resolution.
 - Ingredient categories.
 - Ingredient lookup/search.
+- Ingredient-to-Allergen relationships where implemented.
 
 Example:
 
@@ -167,11 +226,23 @@ Ingredient Resolution
 "Chicken Breast"
 ```
 
+Canonical Ingredient entities are shared by:
+
+```text
+Inventory
+Recipes
+Recommendations
+Shopping Lists
+Allergen relationships
+```
+
+Do not create separate Ingredient representations for individual features.
+
 ---
 
 ### `inventory`
 
-Responsible for authenticated users' persistent ingredient inventories.
+Responsible for authenticated users' persistent Ingredient inventories.
 
 ```text
 User
@@ -183,7 +254,11 @@ InventoryItem
 Ingredient
 ```
 
-Guest ingredient selections are temporary and are not stored as user inventory.
+Guest Ingredient selections are temporary and are not stored as User inventory.
+
+The backend derives the InventoryItem owner from the authenticated User.
+
+The frontend should not submit an authoritative `user_id`.
 
 ---
 
@@ -192,20 +267,33 @@ Guest ingredient selections are temporary and are not stored as user inventory.
 Responsible for:
 
 - Recipes.
-- Recipe ingredients.
+- Recipe ownership.
+- RecipeIngredients.
 - Cooking instructions.
 - Recipe metadata.
-- Manual recipe creation.
+- Recipe Tags.
+- Manual Recipe creation.
+- Recipe modification and deletion where authorized.
 
 ```text
+User
+  │
+  │ owns
+  ▼
 Recipe
-   │
-   ▼
-RecipeIngredient
-   │
-   ▼
-Ingredient
+  │
+  ├── RecipeIngredient ──→ Ingredient
+  │
+  └── Tag
 ```
+
+Normal users may modify or delete only Recipes they own.
+
+Administrators may receive broader permissions.
+
+The backend derives Recipe ownership from the authenticated User.
+
+The frontend should not submit an authoritative `owner_id`.
 
 ---
 
@@ -225,16 +313,30 @@ Guest Ingredients ──────────┐
 Saved User Inventory ───────┘
 ```
 
+Normalized recommendation input may include:
+
+```text
+RecommendationInput
+│
+├── ingredients
+├── match_mode
+│   ├── AVAILABLE_ONLY
+│   └── PARTIAL_MATCH
+├── allergen_ids
+├── tag_ids
+└── other supported filters
+```
+
 Initial matching modes:
 
 ```text
 AVAILABLE_ONLY
-    All required recipe ingredients
+    All required Recipe Ingredients
     must be available.
 
 PARTIAL_MATCH
-    Recipe uses some available ingredients
-    and may require additional ingredients.
+    At least one required Recipe Ingredient
+    overlaps with the available Ingredients.
 ```
 
 The recommendation module should return results such as:
@@ -247,7 +349,7 @@ Missing Ingredients
 Optional Missing Ingredients
 ```
 
-The frontend should not recalculate recommendation business logic.
+The frontend should not recalculate authoritative recommendation business logic.
 
 ---
 
@@ -260,9 +362,23 @@ Responsible for:
 - Review ownership.
 - Review management/moderation.
 
-Guests may read reviews.
+Guests may read Reviews.
 
-Creating or modifying reviews requires authentication.
+Creating or modifying Reviews requires authentication.
+
+```text
+User
+ │
+ ▼
+Review
+ │
+ ▼
+Recipe
+```
+
+The backend derives the Review author from authentication.
+
+A User may have at most one active Review per Recipe in the initial design.
 
 ---
 
@@ -270,13 +386,104 @@ Creating or modifying reviews requires authentication.
 
 Responsible for:
 
-- Shopping lists.
-- Shopping-list items.
-- Generating lists from missing recipe ingredients.
+- ShoppingLists.
+- ShoppingListItems.
+- Generating lists from missing Recipe Ingredients.
 
 Temporary shopping-list generation may be used by Guests.
 
-Persistent shopping lists belong to authenticated users.
+Persistent ShoppingLists belong to authenticated Users.
+
+```text
+ShoppingList
+     │
+     ▼
+ShoppingListItem
+     │
+     ▼
+Ingredient
+```
+
+Shopping-list functionality should reuse canonical Ingredient entities.
+
+---
+
+## Tags and Preferences
+
+Persistent User preferences use standardized Tags.
+
+Initial Tag types include:
+
+```text
+DIET
+CUISINE
+COST
+OTHER
+```
+
+Examples:
+
+```text
+Halal       → DIET
+Vegan       → DIET
+Vietnamese  → CUISINE
+Korean      → CUISINE
+Cheap       → COST
+Quick       → OTHER
+```
+
+Tags are reused by Recipes and User preferences.
+
+```text
+User
+ │
+ ▼
+UserPreference
+ │
+ ▼
+Tag
+ ▲
+ │
+Recipe
+```
+
+Do not create separate free-text preference systems for diet, cuisine, or cost when the corresponding Tag exists.
+
+---
+
+## Allergens
+
+Allergens remain separate from Tags.
+
+```text
+User
+ │
+ ▼
+UserAllergy
+ │
+ ▼
+Allergen
+ ▲
+ │
+Ingredient
+```
+
+Recipe allergen information can therefore be derived through:
+
+```text
+Recipe
+   │
+   ▼
+RecipeIngredient
+   │
+   ▼
+Ingredient
+   │
+   ▼
+Allergen
+```
+
+Allergy-related business logic should not rely only on manually assigned Recipe Tags.
 
 ---
 
@@ -292,6 +499,8 @@ Amazon Cognito
 Authenticated Identity
   ↓
 Django API
+  ↓
+Application User
 ```
 
 Amazon Cognito determines the authenticated identity.
@@ -312,6 +521,43 @@ An Administrator has all Registered User functionality plus administrative funct
 
 ---
 
+## Resource Ownership
+
+Ownership must be derived from the authenticated User whenever possible.
+
+Examples:
+
+```text
+POST /api/inventory/
+→ InventoryItem.user = authenticated User
+
+POST /api/recipes/
+→ Recipe.owner = authenticated User
+
+POST /api/saved-recipes/
+→ SavedRecipe.user = authenticated User
+
+POST /api/recipes/{id}/reviews/
+→ Review.user = authenticated User
+
+POST /api/shopping-lists/
+→ ShoppingList.user = authenticated User
+```
+
+Do not trust client-provided ownership fields such as:
+
+```text
+user_id
+owner_id
+review_author_id
+```
+
+for resources whose ownership can be determined from authentication.
+
+Authorization must always be enforced in Django.
+
+---
+
 ## API
 
 All backend API routes should use the `/api/` prefix.
@@ -319,7 +565,14 @@ All backend API routes should use the `/api/` prefix.
 Examples:
 
 ```text
+/api/users/me/
+/api/users/me/preferences/
+/api/users/me/allergies/
+
 /api/ingredients/
+/api/tags/
+/api/allergens/
+
 /api/inventory/
 /api/recipes/
 /api/recommendations/
@@ -333,6 +586,8 @@ The complete API contract is documented in:
 docs/api-design.md
 ```
 
+When implementing an endpoint, follow the API contract rather than creating an alternative request or response format inside an individual feature.
+
 ---
 
 ## Development Rules
@@ -345,12 +600,46 @@ When contributing to the backend:
 4. Use Django models for persistent domain entities.
 5. Use serializers for API validation and representation.
 6. Do not duplicate recommendation logic for Guests and Registered Users.
-7. Use canonical `Ingredient` entities for ingredient-based business logic.
-8. Enforce permissions in the backend, not only in React.
-9. Do not store secrets directly in source code.
-10. Add tests for important business logic and API behavior.
-11. Avoid unnecessary dependencies between Django apps.
-12. Follow the documented database and API contracts when implementing features.
+7. Use canonical `Ingredient` entities for Ingredient-based business logic.
+8. Use standardized `Tag` entities for Recipe classifications and persistent User preferences.
+9. Keep `Allergen` separate from `Tag`.
+10. Derive resource ownership from the authenticated User.
+11. Never trust client-provided ownership identifiers when ownership can be derived from authentication.
+12. Enforce permissions in the backend, not only in React.
+13. Do not store secrets directly in source code.
+14. Add tests for important business logic and API behavior.
+15. Avoid unnecessary dependencies between Django apps.
+16. Follow the documented database and API contracts when implementing features.
+17. Do not create separate representations of shared domain entities without an architectural reason.
+
+---
+
+## Testing Expectations
+
+Important backend functionality should include automated tests.
+
+Tests should cover areas such as:
+
+```text
+Ingredient APIs
+Tag APIs
+Allergen APIs
+Inventory ownership
+Recipe ownership
+RecipeIngredient behavior
+Recommendation modes
+Tag filtering
+Allergen filtering
+Saved Recipes
+Review ownership and uniqueness
+Shopping-list ownership
+Authentication requirements
+Authorization rules
+```
+
+Postman may be used for manual API testing.
+
+Automated Django/DRF tests remain the authoritative regression tests for backend behavior.
 
 ---
 
@@ -391,6 +680,41 @@ API requests can be tested using Postman.
 
 ---
 
+## Docker
+
+The Django backend is designed to run inside Docker.
+
+Conceptually:
+
+```text
+Django Source
+     │
+     ▼
+Docker Image
+     │
+     ▼
+Backend Container
+```
+
+Persistent application data must remain outside the container.
+
+```text
+Backend Container
+      │
+      ├── PostgreSQL / Amazon RDS
+      └── Media / Amazon S3
+```
+
+The production Docker image must not contain persistent database data, uploaded media, or hardcoded production secrets.
+
+Deployment details are documented in:
+
+```text
+../docs/aws-architecture.md
+```
+
+---
+
 ## Documentation
 
 Before implementing a major feature, check the relevant design documentation:
@@ -402,6 +726,20 @@ Before implementing a major feature, check the relevant design documentation:
 ├── database-design.md     # Models and relationships
 ├── api-design.md          # REST API contract
 └── aws-architecture.md    # AWS deployment architecture
+```
+
+The documentation hierarchy is:
+
+```text
+requirements.md
+      ↓
+database-design.md
+      ↓
+api-design.md
+      ↓
+system-design.md
+      ↓
+aws-architecture.md
 ```
 
 If implementation requires a significant change from the documented architecture, discuss and document the change before introducing conflicting designs.
