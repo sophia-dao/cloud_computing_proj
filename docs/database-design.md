@@ -2,37 +2,30 @@
 
 ## 1. Purpose
 
-This document describes the proposed relational data model for the Recipe Suggestion App.
+This document describes the relational data model for the Recipe Suggestion App.
 
 The application will use PostgreSQL as its relational database.
 
-The database design aims to support:
+The database design supports:
 
 - Guest and registered-user recipe discovery.
-
-- Persistent registered-user accounts.
-
+- Persistent registered-user application accounts.
 - Ingredient inventories.
-
 - Recipes and recipe ingredients.
-
 - Recipe recommendations.
-
 - Saved recipes.
-
-- Dietary preferences and allergies.
-
+- Recipe classifications and user preferences.
+- Allergies.
 - Reviews and ratings.
-
 - Shopping lists.
-
 - Media references.
-
 - Administrative functionality.
 
 Guest-specific temporary state does not necessarily need to be stored in the persistent relational database.
 
-**---**
+Authentication credentials are managed by Amazon Cognito rather than stored directly in the application database.
+
+---
 
 # 2. Design Principles
 
@@ -40,33 +33,27 @@ Guest-specific temporary state does not necessarily need to be stored in the per
 
 Common concepts should be represented once and referenced by other entities.
 
-For example, an ingredient should not be independently represented as plain text in every recipe and user inventory.
+For example, an ingredient should not be independently represented as plain text in every recipe, user inventory, and shopping list.
 
 Instead:
 
 ```text
-
                      Ingredient
-
-                    /          \\
-
-                   /            \\
-
-                  ▼              ▼
-
-          InventoryItem    RecipeIngredient
-
-                │                 │
-
-                ▼                 ▼
-
-              User             Recipe
-
+                    /     |     \
+                   /      |      \
+                  ▼       ▼       ▼
+          InventoryItem   |   ShoppingListItem
+                          |
+                          ▼
+                   RecipeIngredient
+                          |
+                          ▼
+                       Recipe
 ```
 
 This provides a consistent representation of ingredients throughout the application.
 
-**---**
+---
 
 ## 2.2 Normalize Core Application Data
 
@@ -74,201 +61,207 @@ The database should avoid unnecessary duplication of persistent information.
 
 Relationships should be represented using foreign keys and relationship tables where appropriate.
 
-For example, a recipe containing chicken should reference the existing `Ingredient` representing chicken rather than creating a new independent copy of `"Chicken"`.
+For example, a recipe containing chicken should reference the existing canonical `Ingredient` representing chicken rather than creating an independent copy of `"Chicken"`.
 
-**---**
+Recipe classifications should similarly use shared `Tag` entities rather than repeatedly storing unrestricted classification text directly on recipes.
+
+---
 
 ## 2.3 Separate Persistent and Temporary State
 
 Registered-user information that must survive across sessions shall be stored persistently.
 
-Guest information such as temporary ingredient selections or generated shopping lists does not necessarily need persistent database storage.
+Guest information such as temporary ingredient selections, filters, or generated shopping lists does not necessarily need persistent database storage.
 
 ```text
-
 Guest
-
   │
-
   └── Temporary State
 
 Registered User
-
   │
-
   └── PostgreSQL Persistent State
-
 ```
 
 Both may still use the same backend business services.
 
-**---**
+---
+
+## 2.4 Separate Authentication Identity from Application Data
+
+Amazon Cognito is responsible for authentication.
+
+PostgreSQL stores application-specific user information and relationships.
+
+```text
+Amazon Cognito
+      │
+      │ authenticated identity
+      ▼
+Application User
+      │
+      ├── Profile
+      ├── Inventory
+      ├── Preferences
+      ├── Allergies
+      ├── Saved Recipes
+      ├── Reviews
+      └── Shopping Lists
+```
+
+The application database shall not store or manage user passwords.
+
+Each application user shall instead be associated with the corresponding Cognito identity through a stable external identifier.
+
+---
 
 # 3. Core Entities
 
-The initial data model contains the following major entities:
+The initial persistent data model contains the following major entities:
 
 ```text
-
 User
-
 UserProfile
 
 Ingredient
-
 InventoryItem
 
 Recipe
-
 RecipeIngredient
-
 SavedRecipe
 
+Tag
+UserPreference
+
 Allergen
-
 UserAllergy
-
-DietaryPreference
-
-UserDietaryPreference
 
 Review
 
 ShoppingList
-
 ShoppingListItem
-
 ```
 
 Additional entities may be introduced as requirements evolve.
 
-**---**
+---
 
 # 4. High-Level Entity Relationships
 
 ```text
-
                          User
-
                           │
+        ┌─────────┬───────┼──────────┬────────────┐
+        │         │       │          │            │
+        ▼         ▼       ▼          ▼            ▼
+ UserProfile Inventory SavedRecipe Review   ShoppingList
+                │         │         │            │
+                ▼         ▼         ▼            ▼
+           Ingredient   Recipe ───────── ShoppingListItem
+                ▲         │                     │
+                │         │                     ▼
+                │    RecipeIngredient ───── Ingredient
+                │         │
+                └─────────┘
 
-             ┌────────────┼─────────────┐
+User ── UserAllergy ─────── Allergen
+                              ▲
+                              │
+                         Ingredient
 
-             │            │             │
-
-             ▼            ▼             ▼
-
-        UserProfile  InventoryItem   SavedRecipe
-
-                          │             │
-
-                          ▼             ▼
-
-                     Ingredient       Recipe
-
-                          ▲             │
-
-                          │             ▼
-
-                          └──── RecipeIngredient
-
-                                        │
-
-                                        ▼
-
-                                   Ingredient
-
-User ───────── Review ───────── Recipe
-
-User ───── ShoppingList
-
-                │
-
-                ▼
-
-        ShoppingListItem
-
-                │
-
-                ▼
-
-           Ingredient
-
+User ── UserPreference ── Tag ── Recipe
 ```
 
-Additional preference and allergy relationships connect the user to supported dietary and allergen data.
+The major relationships are:
 
-**---**
+```text
+User        M:N Ingredient   through InventoryItem
+Recipe      M:N Ingredient   through RecipeIngredient
+
+User        M:N Recipe       through SavedRecipe
+User        M:N Recipe       through Review
+
+User        M:N Allergen     through UserAllergy
+Ingredient  M:N Allergen
+
+User        M:N Tag          through UserPreference
+Recipe      M:N Tag
+
+User        1:N ShoppingList
+ShoppingList 1:N ShoppingListItem
+ShoppingListItem N:1 Ingredient
+```
+
+---
 
 # 5. User
 
-The `User` entity represents an authenticated application account.
+The `User` entity represents the application's persistent record for an authenticated user.
 
-Authentication-related information will be managed through the selected Django authentication implementation.
+Amazon Cognito is responsible for authentication identity and authentication credentials.
 
-Conceptually, a user may contain information such as:
+The application database shall not store or manage user passwords.
 
-```text
-
-User
-
-├── id
-
-├── username / email
-
-├── password authentication information
-
-├── account status
-
-├── administrative permissions
-
-├── created_at
-
-└── updated_at
-
-```
-
-The exact authentication fields will depend on the authentication design.
-
-The application should use Django's authentication framework rather than implementing password storage manually.
-
-**---**
-
-# 6. User Profile
-
-`UserProfile` stores supported user information that does not directly belong to authentication.
+Each application `User` shall be associated with the corresponding Amazon Cognito identity using a stable external identifier.
 
 Conceptually:
 
 ```text
-
-UserProfile
-
+User
 ├── id
+├── cognito_subject
+├── account_status
+├── is_admin / application permissions
+├── created_at
+└── updated_at
+```
 
+`cognito_subject` represents the stable identifier associated with the authenticated Cognito identity.
+
+The exact Django representation of permissions may use appropriate Django authorization functionality, but authentication credentials remain managed by Cognito.
+
+Relationship:
+
+```text
+Amazon Cognito Identity
+          │
+          │ stable external identifier
+          ▼
+         User
+```
+
+Application-specific data remains associated with the local `User` entity rather than being stored in Cognito.
+
+---
+
+# 6. User Profile
+
+`UserProfile` stores supported application-specific user information that does not belong directly to authentication.
+
+Conceptually:
+
+```text
+UserProfile
+├── id
 ├── user_id
-
 ├── display_name
-
-├── profile_image
-
+├── profile_image_reference
 └── other supported profile settings
-
 ```
 
 Relationship:
 
 ```text
-
 User 1 ───────── 1 UserProfile
-
 ```
+
+Each authenticated application user has at most one associated profile.
 
 A profile image should reference external media storage rather than storing the image binary directly in PostgreSQL.
 
-Whether a separate `UserProfile` model is required will be finalized during Django model design.
+Dietary preferences, cuisine preferences, allergies, and similar structured information should use their corresponding relationship entities rather than being stored as unrestricted profile text.
 
-**---**
+---
 
 # 7. Ingredient
 
@@ -282,8 +275,7 @@ Conceptually:
 Ingredient
 ├── id
 ├── name
-├── category
-└── other supported metadata
+└── category
 ```
 
 Examples:
@@ -299,7 +291,9 @@ Examples:
 8   Green Onion
 ```
 
-Ingredient names should be standardized so that recipes and user inventories can reference the same underlying ingredient.
+Ingredient names should be standardized so recipes and user inventories can reference the same underlying ingredient.
+
+Ingredient names should be unique where appropriate to prevent duplicate canonical ingredient records.
 
 ## 7.1 Canonical Ingredient Principle
 
@@ -326,7 +320,9 @@ category: Poultry
 
 Product-specific properties such as brand, packaging, storage condition, purchase location, or purchase date should not normally create separate canonical ingredients unless the distinction materially affects recipe usage.
 
-Ingredient normalization should not combine foods that may have meaningfully different recipe uses. For example:
+Ingredient normalization should not combine foods that have meaningfully different recipe uses.
+
+For example:
 
 ```text
 Chicken Breast
@@ -335,7 +331,7 @@ Ground Chicken
 Whole Chicken
 ```
 
-These should remain separate canonical ingredients, even if they share a broader category such as `Poultry`.
+These remain separate canonical ingredients even if they share a broader category such as `Poultry`.
 
 Ingredient categories are organizational metadata and do not automatically imply that ingredients are interchangeable.
 
@@ -395,7 +391,17 @@ User #15
 
 Each inventory item references a canonical `Ingredient`.
 
-Guest ingredient selections do not require persistent `InventoryItem` records. Guest ingredients should instead be resolved to the same canonical ingredient representation before recommendation processing.
+The combination of `user_id` and `ingredient_id` should be unique for the initial implementation:
+
+```text
+UNIQUE(user_id, ingredient_id)
+```
+
+This prevents duplicate entries for the same canonical ingredient within a user's inventory.
+
+Guest ingredient selections do not require persistent `InventoryItem` records.
+
+Guest ingredients should instead be resolved to the same canonical ingredient representation before recommendation processing.
 
 ```text
 Guest Input
@@ -425,11 +431,11 @@ Ingredient
 RecommendationService
 ```
 
-This allows both guests and authenticated users to use the same recommendation service.
+This allows both Guests and authenticated users to use the same recommendation service.
 
 ## 8.1 Initial Quantity Handling
 
-For the initial application, recommendation eligibility will primarily be based on whether an ingredient is available rather than whether the user has an exact sufficient quantity.
+For the initial application, recommendation eligibility is primarily based on whether an ingredient is available rather than whether the user has an exact sufficient quantity.
 
 For example:
 
@@ -456,22 +462,28 @@ Conceptually:
 ```text
 Recipe
 ├── id
+├── owner_id
 ├── name
 ├── description
 ├── instructions
 ├── preparation_time
 ├── cooking_time
-├── cuisine
-├── estimated_cost / cost_category
-├── image
-├── created_by
+├── image_reference
 ├── created_at
 └── updated_at
 ```
 
-`created_by` may reference the authenticated user who created the recipe where applicable.
+`owner_id` references the authenticated application user who created and owns the recipe.
+
+Recipe classifications such as cuisine, dietary classification, cost level, and other supported categories are represented through the recipe's relationship with `Tag` rather than duplicated as fields directly on `Recipe`.
+
+Recipe ingredients are represented through `RecipeIngredient`, which references canonical `Ingredient` entities.
 
 Recipe images should be stored in external media storage, with the database maintaining the information necessary to reference the image.
+
+Recipe ownership may be used by backend authorization rules to determine whether a user is allowed to modify or delete a recipe.
+
+Administrators may receive broader recipe-management permissions independent of ownership.
 
 ---
 
@@ -481,7 +493,7 @@ Recipe images should be stored in external media storage, with the database main
 
 Recipes and ingredients have a many-to-many relationship. A recipe contains multiple ingredients, and an ingredient may appear in multiple recipes.
 
-Because this relationship also contains recipe-specific information such as quantity, unit, optional status, and preparation notes, it should be represented using an intermediate entity.
+Because this relationship also contains recipe-specific information such as quantity, unit, optional status, and preparation notes, it is represented using an intermediate entity.
 
 ```text
 Recipe
@@ -502,7 +514,7 @@ RecipeIngredient
 ├── ingredient_id
 ├── quantity
 ├── unit
-├── optional
+├── is_optional
 └── notes
 ```
 
@@ -520,11 +532,11 @@ RecipeIngredient
 └── Green Onion       1 stalk    optional
 ```
 
-The `optional` field indicates whether an ingredient is required for recipe eligibility.
+`is_optional` indicates whether the ingredient is required for recipe eligibility.
 
 Optional ingredients shall not prevent a recipe from qualifying for the `AVAILABLE_ONLY` recommendation mode.
 
-The `notes` field may contain recipe-specific preparation information such as:
+`notes` may contain recipe-specific preparation information such as:
 
 ```text
 "finely chopped"
@@ -533,7 +545,9 @@ The `notes` field may contain recipe-specific preparation information such as:
 "for garnish"
 ```
 
-These descriptions should not create separate canonical ingredients. For example:
+These descriptions should not create separate canonical ingredients.
+
+For example:
 
 ```text
 Ingredient:
@@ -543,7 +557,19 @@ RecipeIngredient.notes:
 "cut into thin strips"
 ```
 
-rather than creating an ingredient named `Chicken Breast Cut Into Thin Strips`.
+rather than creating an ingredient named:
+
+```text
+Chicken Breast Cut Into Thin Strips
+```
+
+A recipe should not contain duplicate `RecipeIngredient` relationships for the same canonical ingredient unless the implementation has a specific reason to represent separate uses.
+
+The combination should therefore normally be unique:
+
+```text
+UNIQUE(recipe_id, ingredient_id)
+```
 
 This relationship is central to recipe matching and shopping-list generation.
 
@@ -556,685 +582,181 @@ Authenticated users shall be able to save recipes.
 This creates a many-to-many relationship:
 
 ```text
-
 User
-
   │
-
   ▼
-
 SavedRecipe
-
   │
-
   ▼
-
 Recipe
-
 ```
 
 Conceptually:
 
 ```text
-
 SavedRecipe
-
 ├── id
-
 ├── user_id
-
 ├── recipe_id
-
 └── created_at
-
 ```
 
-A uniqueness constraint should prevent the same user from saving the same recipe multiple times unnecessarily.
+A user should not save the same recipe multiple times.
 
-**---**
+Therefore:
 
-# 12. Reviews
+```text
+UNIQUE(user_id, recipe_id)
+```
+
+Guest users do not require persistent `SavedRecipe` records.
+
+---
+
+# 12. Review
 
 `Review` represents a rating or review submitted by an authenticated user for a recipe.
 
 Conceptually:
 
 ```text
-
 Review
-
 ├── id
-
 ├── user_id
-
 ├── recipe_id
-
 ├── rating
-
 ├── comment
-
 ├── created_at
-
 └── updated_at
-
 ```
 
 Relationships:
 
 ```text
-
 User 1 ─────── * Review
 
 Recipe 1 ───── * Review
-
 ```
 
 A review belongs to one authenticated user and one recipe.
 
-The system may restrict each user to one active review per recipe.
+The initial design shall allow at most one active review from a user for a particular recipe:
 
-**---**
+```text
+UNIQUE(user_id, recipe_id)
+```
 
-# 13. Allergens
+A user may update their existing review rather than creating multiple independent reviews for the same recipe.
 
-Allergens should be represented independently from recipes.
+The backend should validate that ratings fall within the supported rating range.
+
+---
+
+# 13. Allergen
+
+Allergens are represented independently from recipe tags.
 
 Conceptually:
 
 ```text
-
 Allergen
-
 ├── id
-
 └── name
-
 ```
 
 Examples:
 
 ```text
-
 Peanut
-
 Tree Nut
-
 Milk
-
 Egg
-
 Wheat
-
 Soy
-
 Fish
-
 Shellfish
-
 Sesame
-
 ```
+
+Allergen names should use standardized values where practical.
 
 Ingredients may be associated with one or more allergens.
 
-Conceptually:
-
 ```text
-
 Ingredient * ───── * Allergen
-
 ```
 
 For example:
 
 ```text
-
 Peanut Butter
-
       │
-
       └── Peanut
-
 ```
 
-User allergy information can then reference the same allergen entities:
+A recipe's allergen information can therefore be determined through its ingredients:
 
 ```text
-
-User
-
- │
-
- ▼
-
-UserAllergy
-
- │
-
- ▼
-
-Allergen
-
-```
-
-Conceptually:
-
-```text
-
-UserAllergy
-
-├── id
-
-├── user_id
-
-└── allergen_id
-
-```
-
-This allows recommendation filtering to compare recipe ingredients against a user's recorded allergens.
-
-**---**
-
-# 14. Dietary Preferences
-
-Supported dietary classifications should use standardized values rather than arbitrary text where practical.
-
-Examples may include:
-
-```text
-
-Vegan
-
-Vegetarian
-
-Halal
-
-```
-
-Conceptually:
-
-```text
-
-DietaryPreference
-
-├── id
-
-├── name
-
-└── description
-
-```
-
-Registered users may save preferences:
-
-```text
-
-User
-
- │
-
- ▼
-
-UserDietaryPreference
-
- │
-
- ▼
-
-DietaryPreference
-
-```
-
-Recipes may also be associated with supported dietary classifications.
-
-```text
-
-Recipe * ───── * DietaryPreference
-
-```
-
-This allows recipe filtering to compare recipe classifications against user preferences.
-
-The exact rules used to assign dietary classifications such as halal will be defined separately from the database schema.
-
-**---**
-
-# 15. Shopping List
-
-A registered user may maintain one or more persistent shopping lists.
-
-Conceptually:
-
-```text
-
-ShoppingList
-
-├── id
-
-├── user_id
-
-├── name
-
-├── created_at
-
-└── updated_at
-
-```
-
-Relationship:
-
-```text
-
-User 1 ───── * ShoppingList
-
-```
-
-**---**
-
-# 16. Shopping List Item
-
-A shopping list contains one or more shopping list items.
-
-Conceptually:
-
-```text
-
-ShoppingListItem
-
-├── id
-
-├── shopping_list_id
-
-├── ingredient_id
-
-├── quantity
-
-├── unit
-
-├── completed
-
-└── created_at
-
-```
-
-Relationship:
-
-```text
-
-ShoppingList
-
-      │
-
-      ▼
-
-ShoppingListItem
-
-      │
-
-      ▼
-
-Ingredient
-
-```
-
-For example:
-
-```text
-
-Shopping List
-
-☐ Chicken Breast
-
-☐ Green Onion
-
-☑ Soy Sauce
-
-```
-
-Guest-generated shopping lists may use the same conceptual item structure without being stored persistently.
-
-**---**
-
-# 17. Recommendation Data Flow
-
-Recipe recommendations do not require a persistent `Recommendation` database entity for the initial implementation.
-
-The recommendation service shall calculate recommendations dynamically using canonical ingredient relationships.
-
-Both guests and authenticated users shall use the same recommendation logic:
-
-```text
-Guest Ingredients ────────────┐
-                              │
-                              ▼
-                     RecommendationService
-                              ▲
-                              │
-Saved User Inventory ─────────┘
-```
-
-The difference is the source and persistence of the ingredient data, not the recommendation algorithm.
-
-## 17.1 Recommendation Mode: Available Ingredients Only
-
-In `AVAILABLE_ONLY` mode, a recipe is eligible when every required recipe ingredient is available to the user.
-
-The recipe does not need to use every ingredient the user has.
-
-Conceptually:
-
-```text
-Required Recipe Ingredients ⊆ User Ingredients
-```
-
-Example:
-
-```text
-User Ingredients:
-Egg
-Cabbage
-Soy Sauce
-Kimchi
-
-Recipe A:
-Egg
-Soy Sauce
-→ Eligible
-
-Recipe B:
-Egg
-Cabbage
-Kimchi
-→ Eligible
-
-Recipe C:
-Egg
-Rice
-→ Not Eligible
-```
-
-Optional `RecipeIngredient` records do not determine eligibility for this mode.
-
-## 17.2 Recommendation Mode: Partial Ingredient Match
-
-In `PARTIAL_MATCH` mode, a recipe may require ingredients that the user does not currently have.
-
-A recipe is eligible when at least one required recipe ingredient overlaps with the user's available ingredients.
-
-Conceptually:
-
-```text
-Required Recipe Ingredients ∩ User Ingredients ≠ ∅
-```
-
-The service should identify ingredients the user already has and ingredients that are missing.
-
-Example:
-
-```text
-Kimchi Fried Rice
-
-Available:
-✓ Kimchi
-✓ Egg
-✓ Soy Sauce
-
-Missing:
-✗ White Rice
-✗ Green Onion
-```
-
-Eligible recipes should be ranked according to how well they match the user's available ingredients.
-
-A simple initial match score may be calculated as:
-
-```text
-Match Score = Available Required Ingredients
-              ------------------------------
-               Total Required Ingredients
-```
-
-For example:
-
-```text
-Available Required Ingredients = 3
-Total Required Ingredients     = 5
-
-Match Score = 3 / 5 = 60%
-```
-
-The scoring method may be refined later without changing the underlying ingredient relationships.
-
-## 17.3 Recommendation Results
-
-The recommendation process should be capable of producing:
-
-```text
-RecommendationResult
-├── recipe
-├── match_score
-├── available_ingredients
-├── missing_ingredients
-└── optional_missing_ingredients
-```
-
-Missing ingredients can then be passed to shopping-list functionality.
-
-Recommendation results do not need to be stored persistently unless future requirements introduce recommendation history, analytics, or caching.
-
----
-
-# 18. Shopping List Generation
-
-Shopping-list generation uses the same canonical ingredient data used by inventory, recipes, and recommendation logic.
-
-Conceptually:
-
-```text
-
-Selected Recipe
-
-      │
-
-      ▼
-
+Recipe
+   │
+   ▼
 RecipeIngredient
-
-      │
-
-      │ compare
-
-      ▼
-
-Available Ingredients
-
-      │
-
-      ▼
-
-Missing Ingredients
-
-      │
-
-      ▼
-
-ShoppingListService
-
+   │
+   ▼
+Ingredient
+   │
+   ▼
+Allergen
 ```
 
-For a guest, the generated list may remain temporary.
+This allows allergen information to be derived from canonical ingredient relationships instead of relying only on manually assigned recipe labels.
 
-For an authenticated user, the resulting items may be persisted to a `ShoppingList`.
+---
 
-**---**
+# 14. User Allergy
 
-# 19. Media References
-
-Media binaries shall not be stored directly in PostgreSQL.
-
-The database stores references associated with application entities.
+`UserAllergy` represents an authenticated user's saved allergy information.
 
 Conceptually:
 
 ```text
-
-Recipe
-
-├── database information
-
-└── image reference ───────────→ Media Storage
-
-UserProfile
-
-├── database information
-
-└── avatar reference ──────────→ Media Storage
-
+UserAllergy
+├── id
+├── user_id
+└── allergen_id
 ```
 
-Detailed storage implementation is documented in `aws-architecture.md`.
-
-**---**
-
-# 20. Initial Relationship Summary
+Relationship:
 
 ```text
-
 User
-
  │
-
- ├──── 1 UserProfile
-
+ ▼
+UserAllergy
  │
-
- ├──── * InventoryItem ───── Ingredient
-
- │
-
- ├──── * SavedRecipe ─────── Recipe
-
- │
-
- ├──── * Review ──────────── Recipe
-
- │
-
- ├──── * UserAllergy ─────── Allergen
-
- │
-
- ├──── * UserDietaryPreference ── DietaryPreference
-
- │
-
- └──── * ShoppingList
-
-              │
-
-              └──── * ShoppingListItem ───── Ingredient
-
-Recipe
-
- │
-
- ├──── * RecipeIngredient ───── Ingredient
-
- │
-
- ├──── * Review
-
- │
-
- └──── * DietaryPreference
-
-Ingredient
-
- │
-
- └──── * Allergen
-
+ ▼
+Allergen
 ```
 
-**---**
-
-# 21. Proposed Entity List
-
-The initial persistent database model is expected to contain:
-
-| Entity | Purpose |
-
-| --- | --- |
-
-| User | Authentication and account identity |
-
-| UserProfile | Additional profile information |
-
-| Ingredient | Standardized ingredient |
-
-| InventoryItem | Ingredient belonging to a user's inventory |
-
-| Recipe | Recipe information |
-
-| RecipeIngredient | Recipe-to-ingredient relationship |
-
-| SavedRecipe | User-to-saved-recipe relationship |
-
-| Review | User recipe rating/review |
-
-| Allergen | Standardized allergen |
-
-| UserAllergy | User-to-allergen relationship |
-
-| DietaryPreference | Supported dietary classification |
-
-| UserDietaryPreference | User-to-dietary-preference relationship |
-
-| ShoppingList | Persistent user shopping list |
-
-| ShoppingListItem | Ingredient within a shopping list |
-
-This entity list may change as requirements and implementation details are refined.
-
-**---**
-
-# 22. Ingredient and Recommendation Design Summary
-
-The canonical `Ingredient` entity acts as the common reference point across the application's inventory, recipe, recommendation, and shopping-list functionality.
+The combination should be unique:
 
 ```text
-                         Ingredient
-                        /    |     \
-                       /     |      \
-                      ▼      ▼       ▼
-             InventoryItem   |   ShoppingListItem
-                      │      |
-                      │      ▼
-                      │ RecipeIngredient
-                      │      │
-                      ▼      ▼
-                    User   Recipe
+UNIQUE(user_id, allergen_id)
 ```
 
-This design allows both guest-entered ingredients and authenticated users' saved inventories to be converted into the same canonical ingredient representation and processed by the same `RecommendationService`.
+This allows recommendation and filtering logic to compare recipe ingredients against a user's recorded allergens.
 
-The initial recommendation implementation supports:
-
-- `AVAILABLE_ONLY`: all required recipe ingredients must be available.
-- `PARTIAL_MATCH`: at least one required recipe ingredient must be available, and missing ingredients are identified.
-- Optional ingredients do not prevent `AVAILABLE_ONLY` eligibility.
-- Ingredient availability is initially matched by presence rather than exact inventory quantity.
-- Missing canonical ingredients can be reused directly by shopping-list generation.
+Guest allergy selections may use the same standardized `Allergen` values temporarily without requiring persistent `UserAllergy` records.
 
 ---
 
-# 23. ## Recipe Classification and Tags
+# 15. Recipe Classification and Tags
 
 Recipes use a flexible tag-based classification system.
 
-A `Tag` represents descriptive properties of a recipe such as cuisine, dietary classification, cost level, or other useful categories.
+A `Tag` represents a standardized descriptive property of a recipe, such as cuisine, dietary classification, cost level, or another supported category.
 
-### Tag
+Conceptually:
 
 ```text
 Tag
@@ -1290,51 +812,21 @@ Tags:
 - Quick
 ```
 
-This allows additional classifications to be introduced without modifying the Recipe model for every new category.
+This allows additional classifications to be introduced without modifying the `Recipe` model for every new category.
 
----
-
-## Allergens
-
-Allergens are associated with canonical Ingredients rather than represented only as Recipe tags.
+A tag should normally be unique within its type:
 
 ```text
-Ingredient
-    │
-    │ M:N
-    ▼
-Allergen
+UNIQUE(name, type)
 ```
 
-Examples:
+For example, there should not normally be two separate `Korean` tags with type `CUISINE`.
 
-```text
-Peanut  → Peanut
-Shrimp  → Shellfish
-Milk    → Dairy
-```
+## 15.1 Tags vs. Allergens
 
-A recipe's allergen information can therefore be determined through its ingredients:
+Tags describe recipe characteristics.
 
-```text
-Recipe
-   ↓
-RecipeIngredient
-   ↓
-Ingredient
-   ↓
-Allergen
-```
-
-User allergies can be compared against these allergens when filtering recipes.
-
-This avoids relying on manually assigned labels such as `Peanut-Free` as the authoritative source of allergy information.
-
----
-
-## Recipe Classification Relationship
-
-The resulting structure is:
+Allergens remain associated with canonical Ingredients rather than being represented only as recipe Tags.
 
 ```text
                        Recipe
@@ -1350,44 +842,557 @@ The resulting structure is:
                 Allergen
 ```
 
-Recipe tags describe recipe characteristics.
+For example, a manually assigned `Peanut-Free` label should not be treated as the authoritative source for allergy filtering.
 
-Ingredient allergens provide structured information for allergy filtering.
+Structured Ingredient → Allergen relationships provide the authoritative application relationship used for allergen filtering.
 
 ---
 
-# 24. Related Documentation
+# 16. User Preference
+
+`UserPreference` represents a standardized recipe preference saved by an authenticated user.
+
+It uses the same `Tag` entities used to classify recipes.
+
+Conceptually:
 
 ```text
+UserPreference
+├── id
+├── user_id
+└── tag_id
+```
 
+Relationship:
+
+```text
+User
+ │
+ ▼
+UserPreference
+ │
+ ▼
+Tag
+ │
+ ▼
+Recipe
+```
+
+Examples:
+
+```text
+User #15
+
+Preferences:
+- Vegan       [DIET]
+- Vietnamese  [CUISINE]
+- Cheap       [COST]
+```
+
+The combination should be unique:
+
+```text
+UNIQUE(user_id, tag_id)
+```
+
+Using shared `Tag` entities allows user preferences and recipe classifications to use the same standardized vocabulary.
+
+For example:
+
+```text
+User Preference
+Vietnamese [CUISINE]
+       │
+       ▼
+      Tag
+       ▲
+       │
+Recipe Classification
+Vietnamese [CUISINE]
+```
+
+Guest users may select temporary dietary, cuisine, cost, or other supported filters without creating persistent `UserPreference` records.
+
+The exact business rules used to determine whether a recipe qualifies for classifications such as `Halal` are separate from the relational database structure.
+
+---
+
+# 17. Shopping List
+
+A registered user may maintain one or more persistent shopping lists.
+
+Conceptually:
+
+```text
+ShoppingList
+├── id
+├── user_id
+├── name
+├── created_at
+└── updated_at
+```
+
+Relationship:
+
+```text
+User 1 ───── * ShoppingList
+```
+
+Each persistent shopping list belongs to one authenticated user.
+
+Guest-generated shopping lists do not require persistent `ShoppingList` records.
+
+---
+
+# 18. Shopping List Item
+
+A shopping list contains one or more shopping-list items.
+
+Conceptually:
+
+```text
+ShoppingListItem
+├── id
+├── shopping_list_id
+├── ingredient_id
+├── quantity
+├── unit
+├── completed
+└── created_at
+```
+
+Relationship:
+
+```text
+ShoppingList
+      │
+      ▼
+ShoppingListItem
+      │
+      ▼
+Ingredient
+```
+
+For example:
+
+```text
+Shopping List
+
+☐ Chicken Breast
+☐ Green Onion
+☑ Soy Sauce
+```
+
+Each shopping-list item references the same canonical `Ingredient` entities used by recipes and inventories.
+
+Guest-generated shopping lists may use the same conceptual item structure without being stored persistently.
+
+---
+
+# 19. Recommendation Data Flow
+
+Recipe recommendations do not require a persistent `Recommendation` database entity for the initial implementation.
+
+The recommendation service calculates recommendations dynamically using canonical ingredient relationships.
+
+Both Guests and authenticated users use the same recommendation logic:
+
+```text
+Guest Ingredients ────────────┐
+                              │
+                              ▼
+                     RecommendationService
+                              ▲
+                              │
+Saved User Inventory ─────────┘
+```
+
+The difference is the source and persistence of ingredient data, not the recommendation algorithm.
+
+Additional supported filters may use standardized Tags and Allergens.
+
+Conceptually:
+
+```text
+Canonical Ingredients
+        │
+        ├── User / Guest Filters
+        │       ├── Tags
+        │       └── Allergens
+        │
+        ▼
+RecommendationService
+        │
+        ▼
+Matching Recipes
+```
+
+## 19.1 Recommendation Mode: Available Ingredients Only
+
+In `AVAILABLE_ONLY` mode, a recipe is eligible when every required recipe ingredient is available to the user.
+
+The recipe does not need to use every ingredient the user has.
+
+Conceptually:
+
+```text
+Required Recipe Ingredients ⊆ User Ingredients
+```
+
+Example:
+
+```text
+User Ingredients:
+Egg
+Cabbage
+Soy Sauce
+Kimchi
+
+Recipe A:
+Egg
+Soy Sauce
+→ Eligible
+
+Recipe B:
+Egg
+Cabbage
+Kimchi
+→ Eligible
+
+Recipe C:
+Egg
+Rice
+→ Not Eligible
+```
+
+Optional `RecipeIngredient` records do not determine eligibility for this mode.
+
+## 19.2 Recommendation Mode: Partial Ingredient Match
+
+In `PARTIAL_MATCH` mode, a recipe may require ingredients that the user does not currently have.
+
+A recipe is eligible when at least one required recipe ingredient overlaps with the user's available ingredients.
+
+Conceptually:
+
+```text
+Required Recipe Ingredients ∩ User Ingredients ≠ ∅
+```
+
+The service should identify ingredients the user already has and ingredients that are missing.
+
+Example:
+
+```text
+Kimchi Fried Rice
+
+Available:
+✓ Kimchi
+✓ Egg
+✓ Soy Sauce
+
+Missing:
+✗ White Rice
+✗ Green Onion
+```
+
+Eligible recipes should be ranked according to how well they match the user's available ingredients.
+
+A simple initial match score may be calculated as:
+
+```text
+              Available Required Ingredients
+Match Score = ------------------------------
+                Total Required Ingredients
+```
+
+For example:
+
+```text
+Available Required Ingredients = 3
+Total Required Ingredients     = 5
+
+Match Score = 3 / 5 = 60%
+```
+
+The scoring method may be refined later without changing the underlying ingredient relationships.
+
+## 19.3 Recommendation Results
+
+The recommendation process should be capable of producing:
+
+```text
+RecommendationResult
+├── recipe
+├── match_score
+├── available_ingredients
+├── missing_ingredients
+└── optional_missing_ingredients
+```
+
+Missing ingredients can then be passed directly to shopping-list functionality.
+
+Recommendation results do not need to be stored persistently unless future requirements introduce recommendation history, analytics, or caching.
+
+---
+
+# 20. Shopping List Generation
+
+Shopping-list generation uses the same canonical ingredient data used by inventory, recipes, and recommendation logic.
+
+Conceptually:
+
+```text
+Selected Recipe
+      │
+      ▼
+RecipeIngredient
+      │
+      │ compare
+      ▼
+Available Ingredients
+      │
+      ▼
+Missing Ingredients
+      │
+      ▼
+ShoppingListService
+```
+
+For a Guest, the generated list may remain temporary.
+
+For an authenticated user, the resulting items may be persisted to a `ShoppingList`.
+
+Because missing ingredients are already represented as canonical `Ingredient` entities, shopping-list generation can reuse those entities directly.
+
+---
+
+# 21. Media References
+
+Media binaries shall not be stored directly in PostgreSQL.
+
+The database stores references associated with application entities.
+
+Conceptually:
+
+```text
+Recipe
+├── database information
+└── image_reference ──────────→ Media Storage
+
+UserProfile
+├── database information
+└── profile_image_reference ──→ Media Storage
+```
+
+Detailed media-storage implementation is documented in `aws-architecture.md`.
+
+---
+
+# 22. Data Integrity and Uniqueness Constraints
+
+The database should enforce important relationship constraints where practical.
+
+Initial constraints include:
+
+```text
+Ingredient
+UNIQUE(name)
+
+User
+UNIQUE(cognito_subject)
+
+InventoryItem
+UNIQUE(user_id, ingredient_id)
+
+RecipeIngredient
+UNIQUE(recipe_id, ingredient_id)
+
+SavedRecipe
+UNIQUE(user_id, recipe_id)
+
+Review
+UNIQUE(user_id, recipe_id)
+
+UserAllergy
+UNIQUE(user_id, allergen_id)
+
+Tag
+UNIQUE(name, type)
+
+UserPreference
+UNIQUE(user_id, tag_id)
+```
+
+Foreign-key relationships should preserve referential integrity.
+
+Deletion behavior should be selected deliberately during Django model implementation.
+
+For example, deleting a user should not accidentally delete globally shared canonical Ingredients or Tags.
+
+---
+
+# 23. Relationship Summary
+
+```text
+Amazon Cognito
+      │
+      │ authenticated identity
+      ▼
+     User
+      │
+      ├──── 1 UserProfile
+      │
+      ├──── * InventoryItem ───── Ingredient
+      │
+      ├──── * SavedRecipe ─────── Recipe
+      │
+      ├──── * Review ──────────── Recipe
+      │
+      ├──── * UserAllergy ─────── Allergen
+      │
+      ├──── * UserPreference ──── Tag
+      │
+      └──── * ShoppingList
+                    │
+                    └──── * ShoppingListItem ───── Ingredient
+
+
+Recipe
+  │
+  ├──── owner ────────────────── User
+  │
+  ├──── * RecipeIngredient ───── Ingredient
+  │
+  ├──── * Tag
+  │
+  └──── * Review
+
+
+Ingredient
+  │
+  └──── * Allergen
+
+
+Tag
+  │
+  ├──── * Recipe
+  └──── * UserPreference
+```
+
+The canonical `Ingredient` entity acts as the common reference point across inventory, recipe, recommendation, allergen, and shopping-list functionality.
+
+The canonical `Tag` entity acts as the common vocabulary between recipe classification and persistent user preferences.
+
+---
+
+# 24. Entity Summary
+
+The initial persistent database model contains:
+
+| Entity | Purpose |
+|---|---|
+| `User` | Application user associated with a Cognito identity |
+| `UserProfile` | Additional application profile information |
+| `Ingredient` | Canonical standardized ingredient |
+| `InventoryItem` | User-to-Ingredient inventory relationship |
+| `Recipe` | Core recipe information and ownership |
+| `RecipeIngredient` | Recipe-to-Ingredient relationship with recipe-specific information |
+| `SavedRecipe` | User-to-saved-Recipe relationship |
+| `Tag` | Standardized `DIET`, `CUISINE`, `COST`, or `OTHER` classification |
+| `UserPreference` | User-to-Tag saved preference relationship |
+| `Allergen` | Standardized allergen |
+| `UserAllergy` | User-to-Allergen relationship |
+| `Review` | User rating/review associated with a Recipe |
+| `ShoppingList` | Persistent shopping list belonging to a User |
+| `ShoppingListItem` | Canonical Ingredient within a ShoppingList |
+
+The initial design does **not** require persistent database entities for:
+
+```text
+Guest sessions
+Recommendation results
+Temporary Guest ingredient selections
+Temporary Guest filters
+Temporary Guest shopping lists
+```
+
+These may remain application/session state unless future requirements introduce persistence, analytics, caching, or other needs.
+
+---
+
+# 25. Core Design Summary
+
+The major database design principles can be summarized as:
+
+```text
+Amazon Cognito
+      │
+      │ authentication identity
+      ▼
+Application User
+      │
+      └── PostgreSQL application data
+
+
+Ingredient
+      │
+      ├── Inventory
+      ├── Recipes
+      ├── Allergens
+      ├── Recommendations
+      └── Shopping Lists
+
+
+Tag
+      │
+      ├── Recipe Classification
+      └── User Preferences
+
+
+Allergen
+      │
+      ├── Ingredient Relationships
+      └── User Allergy Relationships
+
+
+RecommendationService
+      │
+      └── Dynamic calculation
+          No persistent Recommendation entity required initially
+```
+
+This structure ensures that:
+
+- Authentication credentials remain separate from application data.
+- Ingredients use one canonical representation throughout the system.
+- Recipe classifications and user preferences use the same standardized Tag vocabulary.
+- Allergens remain structured around Ingredient relationships rather than relying only on manually assigned recipe labels.
+- Guest and authenticated users can share the same recommendation logic.
+- Persistent data remains normalized and reusable across application features.
+
+---
+
+# 26. Related Documentation
+
+```text
 requirements.md
-
     ↓
-
 What data does the application need?
 
 database-design.md
-
     ↓
-
-How is that data related?
+How is that data represented and related?
 
 api-design.md
-
     ↓
-
 How is that data accessed?
 
 system-design.md
-
     ↓
-
 How does application logic use it?
 
 aws-architecture.md
-
     ↓
-
 Where is the data and application infrastructure hosted?
-
 ```
