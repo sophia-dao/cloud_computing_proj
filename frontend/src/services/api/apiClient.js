@@ -1,8 +1,10 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
 
 async function request(endpoint, options = {}) {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
+        cache: "no-store",
         headers: {
             "Content-Type": "application/json",
             ...options.headers,
@@ -10,7 +12,9 @@ async function request(endpoint, options = {}) {
     });
 
     if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
+        const error = new Error(`API request failed: ${response.status}`);
+        error.status = response.status;
+        throw error;
     }
 
     if (response.status === 204) {
@@ -20,35 +24,36 @@ async function request(endpoint, options = {}) {
     return response.json();
 }
 
-export const apiClient = {
-    get(endpoint) {
-        return request(endpoint);
+const apiClient = {
+    get(endpoint, options = {}) {
+        return request(endpoint, {
+            ...options,
+            method: "GET",
+        });
     },
 
-    post(endpoint, data) {
+    post(endpoint, data, options = {}) {
         return request(endpoint, {
+            ...options,
             method: "POST",
             body: JSON.stringify(data),
         });
     },
 
-    put(endpoint, data) {
+    patch(endpoint, data, options = {}) {
         return request(endpoint, {
-            method: "PUT",
-            body: JSON.stringify(data),
-        });
-    },
-
-    patch(endpoint, data) {
-        return request(endpoint, {
+            ...options,
             method: "PATCH",
             body: JSON.stringify(data),
         });
     },
 
-    delete(endpoint) {
+    delete(endpoint, options = {}) {
         return request(endpoint, {
+            ...options,
             method: "DELETE",
         });
     },
 };
+
+export default apiClient;
