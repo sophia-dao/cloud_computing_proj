@@ -1,0 +1,75 @@
+/* =========================================================
+   LIGHT THEME
+   ========================================================= */
+
+:root,
+[data-theme="light"] {
+    color-scheme: light;
+
+    /* Brand */
+    --color-primary: #364327;
+    --color-primary-strong: #28341c;
+    --color-secondary: #9dc88d;
+
+    /* Accent */
+    --color-accent: #dc7027;
+    --color-accent-hover: #c7601d;
+    --color-highlight: #f4a309;
+
+    /* Backgrounds */
+    --color-background: #f7eee5;
+    --color-surface: #fffcf8;
+    --color-surface-secondary: #f1e7dc;
+
+    /* Text */
+    --color-text: #20251c;
+    --color-text-secondary: #68705f;
+    --color-text-on-primary: #ffffff;
+    --color-text-on-accent: #ffffff;
+
+    /* UI */
+    --color-border: #ded8cf;
+
+    /* Semantic */
+    --color-success: #4d774e;
+    --color-warning: #f4a309;
+    --color-error: #c94c4c;
+}
+
+
+/* =========================================================
+   DARK THEME
+   ========================================================= */
+
+[data-theme="dark"] {
+    color-scheme: dark;
+
+    /* Brand */
+    --color-primary: #9dc88d;
+    --color-primary-strong: #b6d9a8;
+    --color-secondary: #4d774e;
+
+    /* Accent */
+    --color-accent: #dc7027;
+    --color-accent-hover: #ed8138;
+    --color-highlight: #f4a309;
+
+    /* Backgrounds */
+    --color-background: #1c1e1b;
+    --color-surface: #292c28;
+    --color-surface-secondary: #343733;
+
+    /* Text */
+    --color-text: #f7f3ed;
+    --color-text-secondary: #b7b9b2;
+    --color-text-on-primary: #172015;
+    --color-text-on-accent: #ffffff;
+
+    /* UI */
+    --color-border: #41463f;
+
+    /* Semantic */
+    --color-success: #9dc88d;
+    --color-warning: #f4a309;
+    --color-error: #e47777;
+}

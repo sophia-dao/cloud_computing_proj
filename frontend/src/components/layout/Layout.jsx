@@ -1,4 +1,5 @@
 import { Link, Outlet } from "react-router-dom";
+import ThemeToggle from "../common/ThemeToggle/ThemeToggle";
 
 function Layout() {
     return (
@@ -12,6 +13,7 @@ function Layout() {
             <main>
                 <Outlet />
             </main>
+            <ThemeToggle />
         </>
     );
 }
