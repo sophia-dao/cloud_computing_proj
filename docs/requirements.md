@@ -17,16 +17,17 @@ This document defines **what the system is expected to do**. Implementation and 
 
 The system must be designed to support increased application traffic and data volume without requiring major architectural changes.
 
-The system should support:
+The initial deployment may use a single backend application instance. However, the application architecture shall avoid unnecessary dependencies on a specific backend instance so that horizontal scaling can be introduced when required.
 
+The architecture should support:
 - Stateless backend API instances where practical.
-- Horizontal scaling of the Django backend.
+- Future horizontal scaling of the Django backend.
+- Load balancing when multiple backend instances are deployed.
 - Independent scaling of frontend, backend, database, and media storage.
 - Pagination for APIs that may return large datasets.
 - Appropriate database indexing.
 - Efficient database access and avoidance of unnecessary queries.
 - Cloud-based object storage for uploaded media.
-- Load balancing when multiple backend instances are deployed.
 - Monitoring of application and infrastructure performance.
 - Load and performance testing using measurable statistics.
 
@@ -233,22 +234,27 @@ Administrators should be able to use the application as normal users without req
 
 ## FR-01 — User Registration
 
-The system shall allow guests to create an account.
+The system shall allow guests to create an account using supported Amazon Cognito authentication flows.
 
-Creating an account shall provide access to functionality requiring persistent user data.
+Initial supported registration and authentication methods shall include:
+- Email and password registration with email verification.
+- Google sign-in.
+
+Creating an account shall establish an authenticated identity that can be associated with persistent application data.
+Authentication credentials shall be managed by Amazon Cognito rather than stored or managed directly by application-specific Django models.
 
 ---
 
 ## FR-02 — User Authentication
 
+Amazon Cognito shall provide user authentication.
 The system shall allow registered users to:
-
 - Log in.
 - Log out.
 - Access account-specific functionality while authenticated.
 
-The system shall identify the currently authenticated user when accessing account-specific resources.
-
+Authenticated requests to protected backend resources shall provide verifiable authentication information.
+Django shall validate authenticated identity and enforce application-specific authorization, ownership, and permissions.
 Users shall not be able to access another user's private data through modification of client requests.
 
 ---
@@ -325,47 +331,60 @@ For guests, ingredient information may exist only for the current session and is
 
 For authenticated users, the system shall allow the ingredient information to be stored as a persistent personal inventory associated with their account.
 
+Ingredient references used by persistent application functionality shall resolve to canonical application ingredients.
+
+Different descriptions of the same underlying ingredient should reference the same canonical ingredient when the differences do not materially affect recipe usage.
+
+For example, brand names or storage conditions such as "Tyson Frozen Chicken Breast" and "Fresh Chicken Breast" should normally resolve to the canonical ingredient "Chicken Breast."
+
+Distinct foods that materially affect recipe usage, such as "Chicken Breast" and "Chicken Thigh," may remain separate canonical ingredients.
+
 ---
 
 ## FR-07 — Recipe Management
 
-The system shall maintain recipe information.
-
-A recipe shall be capable of containing:
-
+The system shall maintain recipe information sufficient to represent:
 - Name.
 - Description.
-- Required ingredients.
-- Ingredient quantities.
+- Required and optional ingredients.
+- Ingredient quantities and units.
 - Cooking instructions.
 - Preparation time.
 - Cooking time.
-- Cuisine.
-- Dietary information.
-- Allergen information.
-- Cost information or cost category.
+- Cuisine classification.
+- Dietary classifications.
+- Allergen information derived from or associated with recipe ingredients where supported.
+- Cost classification or information.
 - Recipe image where applicable.
+
+Recipe classifications such as cuisine, dietary category, and cost category should use reusable standardized classifications rather than unrestricted duplicate values where practical.
+Recipe ingredients shall reference canonical `Ingredient` entities.
 
 ---
 
 ## FR-08 — Recipe Creation
 
-Authorized authenticated users shall be able to manually create recipes.
+**Registered Users shall be able to manually create recipes.**
 
-Recipe creation shall support information including:
-
+Recipe creation shall support:
 - Recipe name.
 - Description.
-- Ingredients.
-- Ingredient quantities.
+- Required and optional ingredients.
+- Ingredient quantities and units.
 - Cooking instructions.
 - Preparation time.
 - Cooking time.
-- Cuisine.
-- Dietary information.
+- Supported cuisine classifications.
+- Supported dietary classifications.
 - Recipe image where applicable.
 
+Recipe ingredients shall reference canonical Ingredient entities.
+
 The system shall validate required recipe information before accepting a new recipe.
+
+Users shall be permitted to modify or delete recipes they own where supported.
+
+Administrators may receive broader recipe-management permissions for moderation and administration.
 
 ---
 
@@ -431,7 +450,7 @@ Guests and registered users shall be able to receive recipe recommendations base
 
 The recommendation system shall support at least two ingredient matching modes.
 
-### Mode 1 — Available Ingredients Only
+### Mode 1 — Available Ingredients Only (AVAILABLE_ONLY)
 
 The system shall provide a mode that returns recipes whose required ingredients are entirely contained within the ingredients currently available to the user.
 
@@ -477,7 +496,7 @@ Rice
 
 This mode allows users to find recipes they can prepare without requiring additional ingredients.
 
-### Mode 2 — Partial Ingredient Match
+### Mode 2 — Partial Ingredient Match (PARTIAL_MATCH)
 
 The system shall provide a mode that returns recipes using one or more ingredients currently available to the user, even when the recipe requires additional ingredients.
 
@@ -693,14 +712,16 @@ The application shall use a modular design across both the frontend and backend.
 
 Related functionality should be grouped into clearly defined application domains or modules.
 
-Major modules may include:
-
-- Authentication and users.
+Major backend application domains include:
+- Users and application authorization.
+- Ingredients.
 - Recipes.
-- Ingredient inventory.
+- Inventory.
 - Recommendations.
 - Reviews.
 - Shopping lists.
+
+Authentication identity is provided through Amazon Cognito and integrated with the users domain.
 
 Changes to one module should minimize unnecessary impact on unrelated modules.
 
