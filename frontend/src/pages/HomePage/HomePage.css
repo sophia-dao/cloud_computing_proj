@@ -6,6 +6,8 @@
     max-width: 900px;
     margin-inline: auto;
     padding-block: clamp(1.5rem, 4vw, 3rem);
+    position: relative;
+    z-index: 0;
 }
 
 .home-page__intro {

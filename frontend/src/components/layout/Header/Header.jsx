@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 
 import ThemeToggle from "../../common/ThemeToggle/ThemeToggle";
 import PageContainer from "../PageContainer/PageContainer";
@@ -12,12 +12,6 @@ function Header({
     title = "Recipe Suggestion",
 })  {
     const [menuOpen, setMenuOpen] = useState(false);
-    const location = useLocation();
-
-    // Close the mobile menu whenever the route changes.
-    useEffect(() => {
-        setMenuOpen(false);
-    }, [location.pathname]);
 
     useEffect(() => {
         if (!menuOpen) return;
