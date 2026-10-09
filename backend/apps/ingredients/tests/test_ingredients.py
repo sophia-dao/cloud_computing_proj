@@ -21,11 +21,29 @@ class IngredientModelTests(TestCase):
         ingredient = Ingredient.objects.create(name="Rice")
         self.assertEqual(ingredient.category, "")
 
+    
     def test_unique_name(self):
-        Ingredient.objects.create(name="Egg")
+        Ingredient.objects.create(name="Chicken Breast")
+
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                Ingredient.objects.create(name="Egg")
+                Ingredient.objects.create(name="Chicken Breast")
+
+
+    def test_case_insensitive_unique_name(self):
+        Ingredient.objects.create(name="Chicken Breast")
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Ingredient.objects.create(name="chicken breast")
+
+
+    def test_uppercase_duplicate_name(self):
+        Ingredient.objects.create(name="Chicken Breast")
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Ingredient.objects.create(name="CHICKEN BREAST")
 
     def test_serialization(self):
         ingredient = Ingredient.objects.create(
