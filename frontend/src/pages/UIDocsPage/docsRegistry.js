@@ -3,6 +3,7 @@ import ButtonExamples from "./examples/ButtonExamples";
 import InputExamples from "./examples/InputExamples";
 import SelectExamples from "./examples/SelectExamples";
 import FormCardExamples from "./examples/FormCardExamples";
+import CardExamples from "./examples/CardExamples";
 
 export const docsRegistry = [
     {
@@ -116,4 +117,38 @@ import Button from "../../components/common/Button/Button";
   <Input label="Maximum Time" type="number" />
 </FormCard>`,
     },
+
+    {
+        id: "card",
+        name: "Card",
+        description:
+            "Reusable content container with optional image, border, shadow, and footer.",
+        file: "src/components/common/Card/Card.jsx",
+        Preview: CardExamples,
+        props: [
+            ["title", "string", "—", "Card heading"],
+            ["description", "string", "—", "Supporting text"],
+            ["children", "ReactNode", "—", "Main card content"],
+            ["footer", "ReactNode", "—", "Optional footer content"],
+            ["image", "string", "—", "Image URL"],
+            ["imageAlt", "string", '""', "Image alternative text"],
+            ["bordered", "boolean", "true", "Show outer border"],
+            ["floating", "boolean", "false", "Apply floating shadow"],
+            ["padding", "boolean", "true", "Enable internal padding"],
+            ["className", "string", '""', "Additional CSS class"],
+        ],
+        code: `import Card from "../../components/common/Card/Card";
+import Button from "../../components/common/Button/Button";
+
+<Card
+    title="Chicken Fried Rice"
+    description="Ready in 25 minutes"
+    bordered
+    floating
+    footer={<Button>View Recipe</Button>}
+>
+    <p>Ingredients: Rice, chicken, eggs.</p>
+</Card>`,
+    },
+
 ];
