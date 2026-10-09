@@ -8,6 +8,8 @@ import ModalExamples from "./examples/ModalExamples";
 import ToastExamples from "./examples/ToastExamples";
 import SearchBarExamples from "./examples/SearchBarExamples";
 import BadgeExamples from "./examples/BadgeExamples";
+import SwitchExamples from "./examples/SwitchExamples";
+import CheckboxExamples from "./examples/CheckboxExamples";
 
 export const docsRegistry = [
     {
@@ -436,6 +438,120 @@ function RecipeTags() {
             <Badge variant="success">Vegetarian</Badge>
             <Badge variant="warning">Partial Match</Badge>
         </div>
+    );
+}`,
+    },
+
+{
+        id: "checkbox",
+        name: "Checkbox",
+        description:
+            "Reusable checkbox for selecting independent options, preferences, and filters.",
+        file: "src/components/common/Checkbox/Checkbox.jsx",
+        Preview: CheckboxExamples,
+        props: [
+            ["label", "string", "—", "Visible checkbox label"],
+            ["description", "string", "—", "Optional supporting text"],
+            ["error", "string", "—", "Validation error message"],
+            ["checked", "boolean", "—", "Controlled checked state"],
+            ["defaultChecked", "boolean", "false", "Initial uncontrolled state"],
+            ["onChange", "function", "—", "Native checkbox change event"],
+            ["disabled", "boolean", "false", "Disable interaction"],
+            ["name", "string", "—", "Form field name"],
+            ["required", "boolean", "false", "Require selection"],
+            ["id", "string", "Auto-generated", "Input ID"],
+            ["className", "string", '""', "Additional CSS class"],
+        ],
+        details:
+            "Checkbox is a reusable form control for selecting individual " +
+            "options or multiple independent choices. It uses a native HTML " +
+            "checkbox to provide keyboard support and accessibility. " +
+            "It supports controlled and uncontrolled state, optional " +
+            "descriptions, validation errors, and disabled behavior.",
+        useCases: [
+            "Selecting dietary preferences.",
+            "Choosing allergy restrictions.",
+            "Enabling multiple recipe filters.",
+            "Selecting items from a list.",
+            "Accepting required terms or conditions.",
+        ],
+        notes: [
+            "Use checked and onChange for controlled checkboxes.",
+            "Use defaultChecked for uncontrolled checkboxes.",
+            "The onChange callback receives a native React change event.",
+            "Use event.target.checked to read the boolean value.",
+            "Checkbox is appropriate for multiple independent selections.",
+            "Use Switch instead for immediate on/off settings.",
+        ],
+        code: `import { useState } from "react";
+import Checkbox from "../../components/common/Checkbox/Checkbox";
+
+function Example() {
+    const [vegetarian, setVegetarian] = useState(false);
+
+    return (
+        <Checkbox
+            label="Vegetarian"
+            checked={vegetarian}
+            onChange={(event) =>
+                setVegetarian(event.target.checked)
+            }
+        />
+    );
+}`,
+    },
+
+{
+        id: "switch",
+        name: "Switch",
+        description:
+            "Reusable toggle control for enabling or disabling application settings.",
+        file: "src/components/common/Switch/Switch.jsx",
+        Preview: SwitchExamples,
+        props: [
+            ["label", "string", "—", "Visible setting label"],
+            ["description", "string", "—", "Optional supporting text"],
+            ["checked", "boolean", "—", "Controlled on/off state"],
+            ["defaultChecked", "boolean", "false", "Initial uncontrolled state"],
+            ["onChange", "function", "—", "Native checkbox change event"],
+            ["disabled", "boolean", "false", "Disable interaction"],
+            ["name", "string", "—", "Form field name"],
+            ["id", "string", "Auto-generated", "Input ID"],
+            ["className", "string", '""', "Additional CSS class"],
+        ],
+        details:
+            "Switch is a reusable toggle control for binary application " +
+            "settings. It uses a native checkbox with role='switch' " +
+            "to provide accessible keyboard interaction and checked state. " +
+            "The component supports controlled and uncontrolled usage, " +
+            "optional descriptions, and disabled behavior.",
+        useCases: [
+            "Enabling or disabling notifications.",
+            "Automatically applying saved recipe preferences.",
+            "Toggling optional application features.",
+            "Controlling binary profile settings.",
+        ],
+        notes: [
+            "Use Switch for on/off settings rather than selecting multiple options.",
+            "Use checked and onChange for controlled state.",
+            "Read event.target.checked to determine whether the switch is enabled.",
+            "The parent component is responsible for persisting setting changes.",
+            "Use Checkbox for selections that are submitted as part of a form.",
+        ],
+        code: `import { useState } from "react";
+import Switch from "../../components/common/Switch/Switch";
+
+function Example() {
+    const [enabled, setEnabled] = useState(false);
+
+    return (
+        <Switch
+            label="Apply Saved Preferences"
+            checked={enabled}
+            onChange={(event) =>
+                setEnabled(event.target.checked)
+            }
+        />
     );
 }`,
     },

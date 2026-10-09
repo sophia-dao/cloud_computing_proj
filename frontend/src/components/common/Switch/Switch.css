@@ -1,0 +1,94 @@
+.ui-switch {
+    width: 100%;
+}
+
+.ui-switch__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.ui-switch__content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.ui-switch__label {
+    color: var(--color-text);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.ui-switch__description {
+    margin: 0;
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.ui-switch__input {
+    appearance: none;
+    position: relative;
+
+    width: 2.75rem;
+    height: 1.5rem;
+    margin: 0;
+    flex-shrink: 0;
+
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-border);
+
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.ui-switch__input::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+
+    width: calc(1.5rem - 6px);
+    height: calc(1.5rem - 6px);
+
+    border-radius: 50%;
+    background: var(--color-surface);
+
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s;
+}
+
+.ui-switch__input:checked {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.ui-switch__input:checked::before {
+    transform: translateX(1.25rem);
+}
+
+.ui-switch__input:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 3px;
+}
+
+.ui-switch--disabled {
+    opacity: 0.55;
+}
+
+.ui-switch--disabled .ui-switch__input,
+.ui-switch--disabled .ui-switch__label {
+    cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .ui-switch__input,
+    .ui-switch__input::before {
+        transition: none;
+    }
+}
