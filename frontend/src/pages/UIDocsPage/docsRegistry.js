@@ -7,6 +7,7 @@ import CardExamples from "./examples/CardExamples";
 import ModalExamples from "./examples/ModalExamples";
 import ToastExamples from "./examples/ToastExamples";
 import SearchBarExamples from "./examples/SearchBarExamples";
+import BadgeExamples from "./examples/BadgeExamples";
 
 export const docsRegistry = [
     {
@@ -386,6 +387,55 @@ function IngredientSearch() {
             placeholder="Search ingredients..."
             debounce={300}
         />
+    );
+}`,
+    },
+
+{
+        id: "badge",
+        name: "Badge / Tag",
+        description:
+            "Compact labels for categories, statuses, and removable selections.",
+        file: "src/components/common/Badge/Badge.jsx",
+        Preview: BadgeExamples,
+        props: [
+            ["children", "ReactNode", "—", "Badge label or content"],
+            ["variant", "string", '"neutral"', "neutral, success, warning, danger, accent"],
+            ["size", "string", '"md"', "sm, md"],
+            ["removable", "boolean", "false", "Show remove button"],
+            ["onRemove", "function", "—", "Callback when remove is clicked"],
+            ["disabled", "boolean", "false", "Disable removal"],
+            ["className", "string", '""', "Additional CSS class"],
+        ],
+        details:
+            "Badge is a compact reusable component for displaying short labels, " +
+            "statuses, and categories. It can also function as a removable tag " +
+            "for selected ingredients or filters. Variants communicate different " +
+            "types of information while maintaining consistent styling across " +
+            "the application.",
+        useCases: [
+            "Displaying recipe cuisine and dietary categories.",
+            "Showing selected ingredients as removable tags.",
+            "Indicating recipe match status.",
+            "Highlighting allergens or unavailable ingredients.",
+            "Displaying active filters and preferences.",
+        ],
+        notes: [
+            "Use removable={true} only when the user can remove the item.",
+            "Provide onRemove when using a removable badge.",
+            "Use stable IDs as React keys when rendering lists of tags.",
+            "Do not rely on badge color alone to communicate important information.",
+            "Badge is a display component; it does not automatically update application state.",
+        ],
+        code: `import Badge from "../../components/common/Badge/Badge";
+
+function RecipeTags() {
+    return (
+        <div>
+            <Badge variant="accent">Vietnamese</Badge>
+            <Badge variant="success">Vegetarian</Badge>
+            <Badge variant="warning">Partial Match</Badge>
+        </div>
     );
 }`,
     },
