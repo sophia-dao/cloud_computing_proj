@@ -74,6 +74,39 @@ function UIDocsPage() {
                         <p>{selectedDoc.description}</p>
                     </div>
 
+                    {selectedDoc.details && (
+                        <section className="ui-docs__section">
+                            <h3>Overview</h3>
+                            <p className="ui-docs__details">
+                                {selectedDoc.details}
+                            </p>
+                        </section>
+                    )}
+
+                    {selectedDoc.useCases?.length > 0 && (
+                        <section className="ui-docs__section">
+                            <h3>When to Use</h3>
+
+                            <ul className="ui-docs__list">
+                                {selectedDoc.useCases.map((useCase) => (
+                                    <li key={useCase}>{useCase}</li>
+                                ))}
+                            </ul>
+                        </section>
+                    )}
+
+                    {selectedDoc.notes?.length > 0 && (
+                        <section className="ui-docs__section">
+                            <h3>Developer Notes</h3>
+
+                            <ul className="ui-docs__list">
+                                {selectedDoc.notes.map((note) => (
+                                    <li key={note}>{note}</li>
+                                ))}
+                            </ul>
+                        </section>
+                    )}
+
                     <section className="ui-docs__section">
                         <h3>Live Preview</h3>
 
