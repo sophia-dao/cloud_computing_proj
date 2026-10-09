@@ -10,6 +10,9 @@ import SearchBarExamples from "./examples/SearchBarExamples";
 import BadgeExamples from "./examples/BadgeExamples";
 import SwitchExamples from "./examples/SwitchExamples";
 import CheckboxExamples from "./examples/CheckboxExamples";
+import SpinnerExamples from "./examples/SpinnerExamples";
+import ErrorStateExamples from "./examples/ErrorStateExamples";
+import EmptyStateExamples from "./examples/EmptyState";
 
 export const docsRegistry = [
     {
@@ -551,6 +554,124 @@ function Example() {
             onChange={(event) =>
                 setEnabled(event.target.checked)
             }
+        />
+    );
+}`,
+    },
+
+{
+        id: "spinner",
+        name: "Spinner",
+        description:
+            "Accessible animated loading indicator with configurable sizes.",
+        file: "src/components/common/Spinner/Spinner.jsx",
+        Preview: SpinnerExamples,
+        props: [
+            ["size", "string", '"md"', "sm, md, lg"],
+            ["label", "string", '"Loading..."', "Accessible loading message"],
+            ["className", "string", '""', "Additional CSS class"],
+        ],
+        details:
+            "Spinner provides visual feedback while an asynchronous operation " +
+            "is running. It supports three sizes and an accessible loading label. " +
+            "It does not perform any API requests or manage loading state.",
+        useCases: [
+            "Loading recipe recommendations.",
+            "Searching ingredients.",
+            "Fetching inventory data.",
+            "Loading user profile information.",
+        ],
+        notes: [
+            "Use size='sm' for inline loading indicators.",
+            "Use size='lg' for larger loading sections.",
+            "The parent component controls when Spinner appears.",
+            "Provide a descriptive label when the loading operation is specific.",
+        ],
+        code: `import Spinner from "../../components/common/Spinner/Spinner";
+
+function Example() {
+    return <Spinner size="md" label="Loading recipes..." />;
+}`,
+    },
+    {
+        id: "empty-state",
+        name: "EmptyState",
+        description:
+            "Reusable placeholder for empty results, collections, and pages.",
+        file: "src/components/common/EmptyState/EmptyState.jsx",
+        Preview: EmptyStateExamples,
+        props: [
+            ["title", "string", '"Nothing here yet"', "Main message"],
+            ["description", "string", '"There is no content to display."', "Supporting text"],
+            ["icon", "ReactNode", '"📭"', "Decorative icon"],
+            ["action", "ReactNode", "—", "Optional action button or link"],
+            ["className", "string", '""', "Additional CSS class"],
+        ],
+        details:
+            "EmptyState communicates that a request succeeded but no matching " +
+            "content is available. It provides a clear explanation and can " +
+            "offer an action that helps users continue.",
+        useCases: [
+            "No matching recipe recommendations.",
+            "Empty saved recipe lists.",
+            "No ingredients in inventory.",
+            "No search results.",
+        ],
+        notes: [
+            "Use EmptyState only when the data is successfully loaded but empty.",
+            "Use ErrorState when an API request fails.",
+            "Use action to provide a meaningful next step.",
+            "Avoid technical error messages in empty states.",
+        ],
+        code: `import EmptyState from "../../components/common/EmptyState/EmptyState";
+
+function Example() {
+    return (
+        <EmptyState
+            title="No Recipes Found"
+            description="Try adjusting your search filters."
+        />
+    );
+}`,
+    },
+    {
+        id: "error-state",
+        name: "ErrorState",
+        description:
+            "Reusable error message with optional retry action.",
+        file: "src/components/common/ErrorState/ErrorState.jsx",
+        Preview: ErrorStateExamples,
+        props: [
+            ["title", "string", '"Something went wrong"', "Error heading"],
+            ["description", "string", "Default error message", "Error explanation"],
+            ["onRetry", "function", "—", "Retry callback"],
+            ["retryLabel", "string", '"Try Again"', "Retry button text"],
+            ["className", "string", '""', "Additional CSS class"],
+        ],
+        details:
+            "ErrorState provides consistent feedback when an operation fails. " +
+            "It can display a user-friendly explanation and optionally provide " +
+            "a retry action. The parent component remains responsible for " +
+            "performing the retry operation.",
+        useCases: [
+            "Failed recipe API requests.",
+            "Inventory loading errors.",
+            "Backend connection failures.",
+            "Profile data retrieval failures.",
+        ],
+        notes: [
+            "Use ErrorState for failed operations, not empty results.",
+            "Provide onRetry only when retrying is meaningful.",
+            "Avoid exposing raw server errors or sensitive information.",
+            "The parent component manages loading and error state.",
+        ],
+        code: `import ErrorState from "../../components/common/ErrorState/ErrorState";
+
+function Example() {
+    return (
+        <ErrorState
+            title="Unable to Load Recipes"
+            onRetry={() => console.log("Retry requested")}
         />
     );
 }`,
