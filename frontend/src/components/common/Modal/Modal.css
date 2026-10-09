@@ -1,0 +1,121 @@
+.ui-modal {
+    width: calc(100% - 2rem);
+    max-width: 520px;
+    max-height: calc(100dvh - 2rem);
+    margin: auto;
+    padding: 0;
+
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg, 1rem);
+
+    background: var(--color-surface);
+    color: var(--color-text);
+
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    overflow: auto;
+}
+
+.ui-modal--sm {
+    max-width: 380px;
+}
+
+.ui-modal--md {
+    max-width: 520px;
+}
+
+.ui-modal--lg {
+    max-width: 760px;
+}
+
+.ui-modal::backdrop {
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(3px);
+}
+
+.ui-modal__panel {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.ui-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.ui-modal__header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.ui-modal__close {
+    display: grid;
+    place-items: center;
+
+    width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+
+    border: none;
+    border-radius: var(--radius-md, 0.5rem);
+
+    background: transparent;
+    color: var(--color-text-secondary);
+
+    font-size: 1.5rem;
+    cursor: pointer;
+}
+
+.ui-modal__close:hover {
+    background: var(--color-background);
+    color: var(--color-text);
+}
+
+.ui-modal__close:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.ui-modal__body {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+    line-height: 1.6;
+}
+
+.ui-modal__description {
+    margin: 0;
+    color: var(--color-text-secondary);
+}
+
+.ui-modal__footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--color-border);
+}
+
+@media (max-width: 480px) {
+
+    .ui-modal__header,
+    .ui-modal__body,
+    .ui-modal__footer {
+        padding: 1rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ui-modal::backdrop {
+        backdrop-filter: none;
+    }
+}

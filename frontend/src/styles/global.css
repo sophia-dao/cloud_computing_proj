@@ -1,0 +1,66 @@
+/* Global reset */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    font-family: var(--font-family-base);
+}
+
+body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+
+    background-color: var(--color-background);
+    color: var(--color-text);
+
+    transition:
+        background-color var(--transition-normal),
+        color var(--transition-normal);
+}
+
+/* Typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    color: var(--color-text);
+}
+
+button,
+input,
+textarea,
+select {
+    font: inherit;
+}
+
+/* Links */
+a {
+    color: inherit;
+}
+
+/* Buttons */
+button {
+    cursor: pointer;
+}
+
+/* Accessibility */
+:focus-visible {
+    outline: 3px solid var(--color-highlight);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
+}

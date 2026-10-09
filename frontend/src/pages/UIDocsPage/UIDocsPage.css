@@ -1,0 +1,213 @@
+.ui-docs {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-6, 1.5rem);
+    padding-block: 2rem 4rem;
+    color: var(--color-text);
+}
+
+.ui-docs__page-header h1 {
+    margin: 0 0 0.5rem;
+    font-size: clamp(1.75rem, 3vw, 2.5rem);
+}
+
+.ui-docs__page-header p,
+.ui-docs__component-header p {
+    margin: 0;
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+}
+
+.ui-docs__layout {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.ui-docs__sidebar {
+    position: sticky;
+    top: 1.5rem;
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg, 1rem);
+    background: var(--color-surface);
+}
+
+.ui-docs__sidebar h2 {
+    margin: 0 0 1rem;
+    font-size: 0.95rem;
+}
+
+.ui-docs__sidebar nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.ui-docs__nav-item {
+    width: 100%;
+    padding: 0.75rem;
+    border: none;
+    border-radius: var(--radius-md, 0.5rem);
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.ui-docs__nav-item:hover {
+    background: var(--color-background);
+}
+
+.ui-docs__nav-item--active {
+    background: var(--color-primary);
+    color: var(--color-text-on-primary, #fff);
+}
+
+.ui-docs__nav-item--active:hover {
+    background: var(--color-primary);
+}
+
+.ui-docs__nav-item:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.ui-docs__content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    min-width: 0;
+}
+
+.ui-docs__component-header h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1.5rem;
+}
+
+.ui-docs__section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.ui-docs__section h3 {
+    margin: 0;
+    font-size: 1.1rem;
+}
+
+.ui-docs__preview {
+    padding: clamp(1rem, 3vw, 2rem);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg, 1rem);
+    background: var(--color-surface);
+}
+
+.ui-docs__example-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.ui-docs__example-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.ui-docs__example-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+    max-width: 500px;
+}
+
+.ui-docs__example-fields>* {
+    margin-bottom: 0;
+}
+
+.ui-docs__file-path {
+    display: block;
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md, 0.5rem);
+    background: var(--color-surface);
+    overflow-wrap: anywhere;
+    font-size: 0.85rem;
+}
+
+.ui-docs__table-wrapper {
+    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md, 0.5rem);
+}
+
+.ui-docs__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    text-align: left;
+}
+
+.ui-docs__table th,
+.ui-docs__table td {
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: top;
+}
+
+.ui-docs__table th {
+    background: var(--color-surface);
+    font-weight: 600;
+}
+
+.ui-docs__table tr:last-child td {
+    border-bottom: none;
+}
+
+.ui-docs__section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.ui-docs__code {
+    margin: 0;
+    padding: 1.25rem;
+    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md, 0.5rem);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    tab-size: 2;
+}
+
+@media (max-width: 768px) {
+    .ui-docs__layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .ui-docs__sidebar {
+        position: static;
+    }
+
+    .ui-docs__sidebar nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .ui-docs__nav-item {
+        width: auto;
+    }
+
+    .ui-docs__table {
+        min-width: 560px;
+    }
+}

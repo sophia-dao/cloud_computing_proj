@@ -1,0 +1,120 @@
+.ui-search-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.ui-search-bar__label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.ui-search-bar__field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    width: 100%;
+    min-height: 44px;
+    padding: 0.65rem 0.85rem;
+
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md, 0.5rem);
+
+    background: var(--color-surface);
+    color: var(--color-text);
+
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ui-search-bar__field:focus-within {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(120, 150, 100, 0.15);
+}
+
+.ui-search-bar__field:has(input:disabled) {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.ui-search-bar__icon {
+    width: 1.2rem;
+    height: 1.2rem;
+    flex-shrink: 0;
+    color: var(--color-text-secondary);
+}
+
+.ui-search-bar__input {
+    flex: 1;
+    min-width: 0;
+
+    padding: 0;
+    border: none;
+    outline: none;
+
+    background: transparent;
+    color: var(--color-text);
+    font: inherit;
+}
+
+.ui-search-bar__input::placeholder {
+    color: var(--color-text-secondary);
+}
+
+.ui-search-bar__input::-webkit-search-cancel-button {
+    display: none;
+}
+
+.ui-search-bar__clear {
+    display: grid;
+    place-items: center;
+
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+
+    border: none;
+    border-radius: 50%;
+
+    background: transparent;
+    color: var(--color-text-secondary);
+
+    font-size: 1.25rem;
+    cursor: pointer;
+}
+
+.ui-search-bar__clear:hover {
+    background: var(--color-background);
+    color: var(--color-text);
+}
+
+.ui-search-bar__clear:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.ui-search-bar__spinner {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+
+    animation: ui-search-spin 0.7s linear infinite;
+}
+
+@keyframes ui-search-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ui-search-bar__spinner {
+        animation: none;
+    }
+}
