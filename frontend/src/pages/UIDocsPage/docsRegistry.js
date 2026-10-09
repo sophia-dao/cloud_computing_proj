@@ -5,6 +5,7 @@ import SelectExamples from "./examples/SelectExamples";
 import FormCardExamples from "./examples/FormCardExamples";
 import CardExamples from "./examples/CardExamples";
 import ModalExamples from "./examples/ModalExamples";
+import ToastExamples from "./examples/ToastExamples";
 
 export const docsRegistry = [
     {
@@ -275,6 +276,53 @@ function Example() {
     );
 }`,
     },
-    
+
+    {
+        id: "toast",
+        name: "Toast",
+        description:
+            "Global, non-blocking notifications for success, errors, warnings, and information.",
+        file: "src/components/common/Toast/Toast.jsx",
+        Preview: ToastExamples,
+        props: [
+            ["type", "string", '"info"', "success, error, warning, info"],
+            ["message", "string", "—", "Notification message"],
+            ["duration", "number", "4000", "Auto-dismiss delay in milliseconds"],
+            ["dismissible", "boolean", "true", "Show manual dismiss button"],
+        ],
+        details:
+            "Toast provides temporary, non-blocking feedback about actions " +
+            "or system events. Notifications are managed globally by ToastProvider, " +
+            "so any component inside the provider can display them using useToast. " +
+            "Multiple notifications can be displayed at the same time.",
+        useCases: [
+            "Confirming that a recipe was saved.",
+            "Displaying API request failures.",
+            "Informing users that preferences were updated.",
+            "Warning about unavailable ingredients.",
+        ],
+        notes: [
+            "Wrap the application with ToastProvider once.",
+            "Call showToast from useToast to display a notification.",
+            "Use duration={0} for a persistent notification.",
+            "Toast should not replace Modal for actions requiring confirmation.",
+            "Avoid including sensitive information in notifications.",
+        ],
+        code: `import { useToast } from "../../hooks/useToast";
+
+function SaveRecipeButton() {
+    const { showToast } = useToast();
+
+    function handleSave() {
+        showToast({
+            type: "success",
+            message: "Recipe saved successfully!",
+            duration: 4000,
+        });
+    }
+
+    return <button onClick={handleSave}>Save Recipe</button>;
+}`,
+    },    
 
 ];
