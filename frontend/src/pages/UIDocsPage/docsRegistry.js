@@ -6,6 +6,7 @@ import FormCardExamples from "./examples/FormCardExamples";
 import CardExamples from "./examples/CardExamples";
 import ModalExamples from "./examples/ModalExamples";
 import ToastExamples from "./examples/ToastExamples";
+import SearchBarExamples from "./examples/SearchBarExamples";
 
 export const docsRegistry = [
     {
@@ -324,5 +325,69 @@ function SaveRecipeButton() {
     return <button onClick={handleSave}>Save Recipe</button>;
 }`,
     },    
+
+{
+        id: "search-bar",
+        name: "SearchBar",
+        description:
+            "Reusable search input with debouncing, loading feedback, and a clear button.",
+        file: "src/components/common/SearchBar/SearchBar.jsx",
+        Preview: SearchBarExamples,
+        props: [
+            ["value", "string", "—", "Controlled search value"],
+            ["defaultValue", "string", '""', "Initial uncontrolled value"],
+            ["onChange", "function", "—", "Called with updated text"],
+            ["onSearch", "function", "—", "Called with the search query"],
+            ["onClear", "function", "—", "Called when the clear button is clicked"],
+            ["placeholder", "string", '"Search..."', "Input placeholder"],
+            ["label", "string", '"Search"', "Accessible field label"],
+            ["debounce", "number", "300", "Delay in milliseconds"],
+            ["loading", "boolean", "false", "Show loading indicator"],
+            ["disabled", "boolean", "false", "Disable the input"],
+            ["showClear", "boolean", "true", "Show clear button"],
+            ["className", "string", '""', "Additional CSS class"],
+        ],
+        details:
+            "SearchBar is a reusable search input that manages text entry, " +
+            "debounced search events, and loading feedback. It supports both " +
+            "controlled and uncontrolled values. The component does not " +
+            "fetch data itself; feature-specific services handle API requests.",
+        useCases: [
+            "Searching the canonical Ingredient database.",
+            "Searching recipes by name.",
+            "Filtering saved recipes.",
+            "Searching administrative lists.",
+        ],
+        notes: [
+            "Use onSearch to connect the component to a search function.",
+            "Debouncing reduces unnecessary search requests.",
+            "Pressing Enter triggers an immediate search.",
+            "Use loading to indicate that a request is in progress.",
+            "Use controlled mode when search state is shared with filters or other components.",
+            "Do not make API requests directly inside SearchBar.",
+            "SearchBar renders a form; do not nest it inside another HTML form.",
+        ],
+        code: `import { useState } from "react";
+import SearchBar from "../../components/common/SearchBar/SearchBar";
+
+function IngredientSearch() {
+    const [query, setQuery] = useState("");
+
+    function handleSearch(searchTerm) {
+        console.log("Search:", searchTerm);
+    }
+
+    return (
+        <SearchBar
+            label="Search Ingredients"
+            value={query}
+            onChange={setQuery}
+            onSearch={handleSearch}
+            placeholder="Search ingredients..."
+            debounce={300}
+        />
+    );
+}`,
+    },
 
 ];
