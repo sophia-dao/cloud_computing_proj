@@ -9,6 +9,14 @@ flowchart LR
     B -->|"Testing, Documentation & Presentation Preparation"| C
 ```
 
+## Midpoint Evaluation — October 16, 2026
+
+For the Cloud Computing Midpoint Evaluation, the team is prioritizing AWS infrastructure, deployment automation, cloud architecture documentation, and a working prototype.
+
+This temporary milestone strategy allows us to demonstrate cloud computing concepts while continuing development of the full Recipe Suggestion App.
+
+See [Midpoint Evaluation Documentation](docs/midpoint/README.md) for the implementation plan, architecture, progress, and submission requirements.
+
 ## Overview
 
 The Recipe Suggestion App is a cloud-based web application that helps users decide what to cook based on ingredients they already have.
