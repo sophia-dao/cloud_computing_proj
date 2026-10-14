@@ -231,53 +231,35 @@ _*Figure 4. Proposed CI/CD pipeline. The GitHub OIDC provider exists, but the Gi
 
 ## 3. Implementation progress
 
-### 3.1 Application code
+### 3.1 Application Code
 
-\| Component | Current progress | Evidence / limitation |
-
-\| --- | --- | --- |
-
-\| Django REST backend foundation | Implemented | Local Django server and tests have been run |
-
-\| Canonical Ingredient API | Implemented and verified | Case-insensitive search, detail lookup, validation of unsupported methods, and automated tests |
-
-\| User/profile backend | Partially implemented and tested | Recent checks passed; Cognito authentication not yet verified |
-
-\| React application foundation | Implemented | Routing, reusable components, theme, and a custom 404 page have been worked on |
-
-\| Recipes, inventory, recommendations, saved recipes | Defined in GitHub issues and system design | Do not claim completion without confirming merged implementations |
-
-\| Full frontend-to-backend integration | In progress | Requires a verified end-to-end walkthrough |
+| Component                                          | Current Progress                           | Evidence / Limitation                                                                      |
+| -------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| Django REST backend foundation                     | Implemented                                | Local Django server and tests have been run                                                |
+| Canonical Ingredient API                           | Implemented and verified                   | Case-insensitive search, detail lookup, unsupported-method validation, and automated tests |
+| User/profile backend                               | Partially implemented and tested           | Recent checks passed; Cognito authentication not yet verified                              |
+| React application foundation                       | Implemented                                | Routing, reusable components, theme, and custom 404 page                                   |
+| Recipes, inventory, recommendations, saved recipes | Defined in GitHub issues and system design | Do not claim completion without confirming merged implementations                          |
+| Full frontend-to-backend integration               | In progress                                | Requires a verified end-to-end walkthrough                                                 |
 
 The **canonical Ingredient** design is a shared foundation: inventory, recipes, and recommendations are intended to reference the same ingredient records rather than create inconsistent duplicate names.
 
-### 3.2 AWS infrastructure and deployment preparation
+### 3.2 AWS Infrastructure and Deployment Preparation
 
-\| Resource / practice | Current status | Verification performed |
+| Resource / Practice                                    | Current Status                                     | Verification Performed                                            |
+| ------------------------------------------------------ | -------------------------------------------------- | ----------------------------------------------------------------- |
+| VPC, Internet Gateway, route table, two public subnets | Deployed                                           | CloudFormation network stack deployed and updated                 |
+| EC2 backend instance (`t3.micro`)                      | Deployed                                           | Backend stack completed successfully                              |
+| Docker on EC2                                          | Verified                                           | Docker version and service status checked via SSM                 |
+| AWS Systems Manager                                    | Verified                                           | Interactive session to EC2 established without inbound SSH        |
+| Amazon ECR                                             | Deployed                                           | `recipe-app-backend:midpoint-v1` image pushed                     |
+| Dockerized Django                                      | Verified locally                                   | API returned HTTP 200 after applying migrations in test container |
+| GitHub OIDC identity provider                          | Created and verified                               | Provider ARN returned by IAM CLI                                  |
+| GitHub deployment role                                 | Template prepared; deployment verification pending | Confirm stack status and role ARN before marking verified         |
+| GitHub Actions deployment workflow                     | Not implemented                                    | Work intentionally paused for midpoint documentation              |
+| Amazon RDS                                             | Not implemented                                    | SQLite currently used in local prototype                          |
+| AWS-hosted React frontend                              | Not verified                                       | S3/CloudFront hosting remains planned                             |
 
-\| --- | --- | --- |
-
-\| VPC, Internet Gateway, route table, two public subnets | Deployed | CloudFormation network stack deployed and updated |
-
-\| EC2 backend instance (`t3.micro`) | Deployed | Backend stack completed successfully |
-
-\| Docker on EC2 | Verified | Docker version and service status checked via SSM |
-
-\| AWS Systems Manager | Verified | Interactive session to EC2 established without inbound SSH |
-
-\| Amazon ECR | Deployed | `recipe-app-backend:midpoint-v1` image pushed |
-
-\| Dockerized Django | Verified locally | API returned HTTP 200 after applying migrations in test container |
-
-\| GitHub OIDC identity provider | Created and verified | Provider ARN returned by IAM CLI |
-
-\| GitHub deployment role | Template prepared; deployment verification pending | Confirm stack status and role ARN before marking verified |
-
-\| GitHub Actions deployment workflow | Not implemented | Work intentionally paused for midpoint documentation |
-
-\| Amazon RDS | Not implemented | SQLite currently used in local prototype |
-
-\| AWS-hosted React frontend | Not verified | S3/CloudFront hosting remains planned |
 
 **Infrastructure specifics:** AWS region `us-east-1`; VPC CIDR `10.0.0.0/16`; public subnets `10.0.1.0/24` and `10.0.2.0/24`. The backend EC2 security group has no inbound rules at the midpoint, so public access to Django is not yet available. The EC2 instance uses an IAM role for SSM and scoped ECR image retrieval.
 
