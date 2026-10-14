@@ -231,37 +231,45 @@ _*Figure 4. Proposed CI/CD pipeline. The GitHub OIDC provider exists, but the Gi
 
 ## 3. Implementation progress
 
-### 3.1 Application Code
+### 3.1 Application code
 
-| Component                                          | Current Progress                           | Evidence / Limitation                                                                      |
-| -------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| Django REST backend foundation                     | Implemented                                | Local Django server and tests have been run                                                |
-| Canonical Ingredient API                           | Implemented and verified                   | Case-insensitive search, detail lookup, unsupported-method validation, and automated tests |
-| User/profile backend                               | Partially implemented and tested           | Recent checks passed; Cognito authentication not yet verified                              |
-| React application foundation                       | Implemented                                | Routing, reusable components, theme, and custom 404 page                                   |
-| Recipes, inventory, recommendations, saved recipes | Defined in GitHub issues and system design | Do not claim completion without confirming merged implementations                          |
-| Full frontend-to-backend integration               | In progress                                | Requires a verified end-to-end walkthrough                                                 |
+The team has completed five GitHub issues under the **MVP / Midpoint Evaluation** milestone. These cover the foundational backend APIs, frontend structure, containerization, and reusable UI components.
 
-The **canonical Ingredient** design is a shared foundation: inventory, recipes, and recommendations are intended to reference the same ingredient records rather than create inconsistent duplicate names.
+| Component | Current progress | Evidence / limitation |
+| --- | --- | --- |
+| Django REST backend foundation | Implemented and tested | Django project initialized, REST API structure configured, and local development tests performed |
+| Canonical Ingredient API — Issue #1 | Completed | Ingredient model, case-insensitive search, detail lookup, HTTP error handling, and automated tests |
+| User Profile & Preferences — Issue #2 | Completed (Cognito integration pending) | User/profile and preferences functionality implemented; local checks passed, but Cognito authentication is not yet integrated |
+| React Application Foundation — Issue #3 | Completed | React routing, shared application structure, layouts, and API service foundation |
+| Dockerized Django Backend — Issue #15 | Completed and locally verified | Docker image configured with Gunicorn; backend API successfully tested inside a local container |
+| Reusable UI Design System and Layout Template — Issue #34 | Completed | Shared frontend design system, reusable UI components, layout templates, and styling foundation |
+| Recipes, inventory, recommendations, and saved recipes | Pending / in development | Functionality defined in GitHub issues and system design; completion requires implementation and verification |
+| Full frontend-to-backend integration | In progress | Requires a verified end-to-end user workflow |
+
+The completed issues establish a reusable foundation for further development. The **canonical Ingredient** model is particularly important because inventory, recipes, and recommendations are designed to reference the same ingredient records rather than maintain inconsistent representations.
+
+The frontend foundation and reusable design system also support consistent interfaces and reduce duplicated implementation work across team members.
+
+Although these five issues are closed, **the full application is not yet complete**. Recipe recommendation workflows, authentication integration, and cloud deployment remain priorities for the next development phase.
 
 ### 3.2 AWS Infrastructure and Deployment Preparation
 
-| Resource / Practice                                    | Current Status                                     | Verification Performed                                            |
-| ------------------------------------------------------ | -------------------------------------------------- | ----------------------------------------------------------------- |
-| VPC, Internet Gateway, route table, two public subnets | Deployed                                           | CloudFormation network stack deployed and updated                 |
-| EC2 backend instance (`t3.micro`)                      | Deployed                                           | Backend stack completed successfully                              |
-| Docker on EC2                                          | Verified                                           | Docker version and service status checked via SSM                 |
-| AWS Systems Manager                                    | Verified                                           | Interactive session to EC2 established without inbound SSH        |
-| Amazon ECR                                             | Deployed                                           | `recipe-app-backend:midpoint-v1` image pushed                     |
-| Dockerized Django                                      | Verified locally                                   | API returned HTTP 200 after applying migrations in test container |
-| GitHub OIDC identity provider                          | Created and verified                               | Provider ARN returned by IAM CLI                                  |
-| GitHub deployment role                                 | Template prepared; deployment verification pending | Confirm stack status and role ARN before marking verified         |
-| GitHub Actions deployment workflow                     | Not implemented                                    | Work intentionally paused for midpoint documentation              |
-| Amazon RDS                                             | Not implemented                                    | SQLite currently used in local prototype                          |
-| AWS-hosted React frontend                              | Not verified                                       | S3/CloudFront hosting remains planned                             |
+| Resource / Practice                                    | Current Status     | Verification Performed                                            |
+| ------------------------------------------------------ | ------------------ | ----------------------------------------------------------------- |
+| VPC, Internet Gateway, route table, two public subnets | Deployed           | CloudFormation network stack deployed and updated                 |
+| EC2 backend instance (`t3.micro`)                      | Deployed           | Backend stack completed successfully                              |
+| Docker on EC2                                          | Verified           | Docker version and service status checked via SSM                 |
+| AWS Systems Manager                                    | Verified           | Interactive session to EC2 established without inbound SSH        |
+| Amazon ECR                                             | Deployed           | `recipe-app-backend:midpoint-v1` image pushed                     |
+| Dockerized Django                                      | Verified locally   | API returned HTTP 200 after applying migrations in test container |
+| GitHub OIDC CloudFormation stack                       | Planned            | Deployment postponed until after midpoint evaluation             |
+| GitHub Actions deployment workflow                     | Planned            | Implementation postponed until after midpoint evaluation         |
+| Amazon RDS                                             | Not implemented    | SQLite currently used in local prototype                          |
+| AWS-hosted React frontend                              | Not verified       | S3/CloudFront hosting remains planned                             |
 
+**Infrastructure specifics:** AWS region `us-east-1`; VPC CIDR `10.0.0.0/16`; public subnets `10.0.1.0/24` and `10.0.2.0/24`. The backend EC2 security group has no inbound rules at the midpoint, so public access to Django is not yet available. The EC2 instance uses an IAM role for Systems Manager access and scoped ECR image retrieval.
 
-**Infrastructure specifics:** AWS region `us-east-1`; VPC CIDR `10.0.0.0/16`; public subnets `10.0.1.0/24` and `10.0.2.0/24`. The backend EC2 security group has no inbound rules at the midpoint, so public access to Django is not yet available. The EC2 instance uses an IAM role for SSM and scoped ECR image retrieval.
+The team has successfully provisioned the core AWS networking, compute, and container registry infrastructure using CloudFormation. GitHub OIDC authentication and automated CI/CD deployment remain planned improvements for the next development phase.
 
 ## 4. Testing and evidence
 
@@ -277,9 +285,8 @@ Completed checks reported during development include:
 
 5. **Container registry:** A backend image was built for `linux/amd64` and pushed to Amazon ECR.
 
-6. **OIDC identity:** AWS IAM returned the GitHub OIDC provider, establishing that the identity provider was created. This does **not** prove an end-to-end GitHub Actions deployment.
+6. **GitHub milestone progress:** Five issues were closed under the MVP / Midpoint Evaluation milestone: #1, #2, #3, #15, and #34. 
 
-**Evidence to attach before submission:** screenshots or terminal excerpts showing the Django test summary, successful Ingredient API response, frontend UI, Docker test, CloudFormation stack status, ECR image tag, EC2 instance, and SSM connection. Remove tokens, secret values, and unnecessary personal/account information from screenshots.
 
 ## 5. Challenges and lessons learned
 
@@ -315,27 +322,27 @@ To address the course's scalability requirement, the final evaluation should inc
 
 ## 7. Remaining work and risks
 
-\| Remaining task | Main risk | Proposed next action |
+| Remaining task | Main risk | Proposed next action |
 
-\| --- | --- | --- |
+| --- | --- | --- |
 
-\| Integrate frontend and Django APIs | Inconsistent API contracts or unfinished UI flows | Verify one complete user journey and fix integration issues |
+| Integrate frontend and Django APIs | Inconsistent API contracts or unfinished UI flows | Verify one complete user journey and fix integration issues |
 
-\| Complete recipes, inventory, and recommendation flows | Shared data/model dependencies | Prioritize an end-to-end available-ingredients recommendation |
+| Complete recipes, inventory, and recommendation flows | Shared data/model dependencies | Prioritize an end-to-end available-ingredients recommendation |
 
-\| Integrate and verify Cognito authentication | Authorization and profile mapping complexity | Test login, protected endpoints, and role behavior |
+| Integrate and verify Cognito authentication | Authorization and profile mapping complexity | Test login, protected endpoints, and role behavior |
 
-\| Run Django container on EC2 | Runtime configuration, migrations, service health | Deploy an image, apply migrations, and run a local-on-instance health check |
+| Run Django container on EC2 | Runtime configuration, migrations, service health | Deploy an image, apply migrations, and run a local-on-instance health check |
 
-\| Implement persistent cloud storage | SQLite data loss or deployment coupling | Add and test an appropriate persistent database strategy |
+| Implement persistent cloud storage | SQLite data loss or deployment coupling | Add and test an appropriate persistent database strategy |
 
-\| Deploy React frontend | Hosting, routing, CORS, and HTTPS | Configure hosting and test API connectivity |
+| Deploy React frontend | Hosting, routing, CORS, and HTTPS | Configure hosting and test API connectivity |
 
-\| Complete GitHub Actions CI/CD | IAM permissions, safe secret handling, failed rollouts | Finish OIDC verification and implement tested build/push/deploy stages |
+| Complete GitHub Actions CI/CD | IAM permissions, safe secret handling, failed rollouts | Finish OIDC verification and implement tested build/push/deploy stages |
 
-\| Measure scalability and security | Insufficient evidence for professor's criteria | Run load tests and document protections and limitations |
+| Measure scalability and security | Insufficient evidence for professor's criteria | Run load tests and document protections and limitations |
 
-\| Record final demo and update documentation | Schedule and integration delays | Freeze demo scope and verify a repeatable demonstration |
+| Record final demo and update documentation | Schedule and integration delays | Freeze demo scope and verify a repeatable demonstration |
 
 ## 8. Plan through final submission
 
@@ -347,7 +354,7 @@ To address the course's scalability requirement, the final evaluation should inc
 
 ## 9. Midpoint conclusion
 
-The project has progressed from an initial application proposal to a structured Django/React codebase, a tested Ingredient API, local Docker execution, and provisioned AWS networking, compute, registry, and management resources. The team followed its original plan to use EC2-hosted Docker, ECR, and a modular-monolith Django backend, while introducing CloudFormation-based provisioning, Systems Manager access, and a second public subnet during implementation. RDS, Cognito, frontend hosting, and deployment automation remain part of the target architecture but have been staged for later integration. These refinements established a concrete deployment foundation and revealed practical integration challenges.
+The project has progressed from an initial application proposal to a structured Django/React codebase with five completed GitHub issues covering ingredient management, user profiles and preferences, frontend application structure, reusable UI design, and backend containerization. Alongside these application milestones, the team has provisioned AWS networking, compute, container registry, and instance management infrastructure using CloudFormation.
 
 The main remaining objective is to connect the existing pieces into a working cloud-hosted application, while finishing user-facing recipe workflows, authentication, persistence, automation, and measurable scalability testing. The midpoint demonstrates **partial functionality and infrastructure progress**, not a finished production system.
 
