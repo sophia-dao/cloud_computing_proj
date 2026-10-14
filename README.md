@@ -15,7 +15,7 @@ For the Cloud Computing Midpoint Evaluation, the team is prioritizing AWS infras
 
 This temporary milestone strategy allows us to demonstrate cloud computing concepts while continuing development of the full Recipe Suggestion App.
 
-See [Midpoint Evaluation Documentation](docs/midpoint-evaluation/README.md) for the implementation plan, architecture, progress, and submission requirements.
+See [Midpoint Evaluation Documentation](docs/midpoint/PROGRESS.md) for the implementation plan, architecture, progress, and submission requirements.
 
 ## Overview
 
