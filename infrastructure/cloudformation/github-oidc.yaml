@@ -1,0 +1,91 @@
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Recipe App - GitHub Actions OIDC deployment role
+
+Parameters:
+  GitHubOwner:
+    Type: String
+    Default: sophia-dao
+
+  GitHubRepository:
+    Type: String
+    Default: cloud_computing_proj
+
+Resources:
+  GitHubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+
+  GitHubActionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: recipe-app-github-actions-role
+      Description: GitHub Actions deployment role for Recipe App
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOIDCProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub
+                  - "repo:${Owner}/${Repo}:ref:refs/heads/main"
+                  - Owner: !Ref GitHubOwner
+                    Repo: !Ref GitHubRepository
+
+      Policies:
+        - PolicyName: RecipeAppDeploymentPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Authenticate to Amazon ECR
+              - Sid: ECRAuthorization
+                Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+
+              # Push and inspect backend Docker images
+              - Sid: ECRPush
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:CompleteLayerUpload
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                  - ecr:BatchGetImage
+                  - ecr:DescribeImages
+                Resource: !ImportValue RecipeApp-BackendRepositoryArn
+
+              # Send deployment commands to the EC2 instance
+              - Sid: SSMDeploy
+                Effect: Allow
+                Action:
+                  - ssm:SendCommand
+                Resource:
+                  - !Sub arn:aws:ssm:${AWS::Region}::document/AWS-RunShellScript
+                  - !Sub
+                    - arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/${InstanceId}
+                    - InstanceId: !ImportValue RecipeApp-BackendInstanceId
+
+              # Read deployment command status
+              - Sid: SSMReadDeployment
+                Effect: Allow
+                Action:
+                  - ssm:GetCommandInvocation
+                  - ssm:ListCommandInvocations
+                Resource: "*"
+
+Outputs:
+  GitHubActionsRoleArn:
+    Description: IAM role ARN for GitHub Actions
+    Value: !GetAtt GitHubActionsRole.Arn
+    Export:
+      Name: RecipeApp-GitHubActionsRoleArn

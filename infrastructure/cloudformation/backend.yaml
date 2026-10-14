@@ -112,6 +112,8 @@ Outputs:
   InstanceId:
     Description: Backend EC2 instance ID
     Value: !Ref BackendInstance
+    Export:
+      Name: RecipeApp-BackendInstanceId
 
   PublicIp:
     Description: Public IPv4 address of backend EC2 instance
