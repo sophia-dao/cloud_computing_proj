@@ -28,7 +28,7 @@ The planned user roles are **Guest**, **Registered User**, and **Administrator**
 
 ### 2.1 Original system design and initial AWS decisions
 
-The original architecture, documented in [`README.md`](../README.md), [`system-design.md`](system-design.md), and [`aws-architecture.md`](aws-architecture.md), specified a **client-server application with a modular-monolith Django backend**, not microservices. The team planned to separate frontend presentation, backend business logic and authorization, authentication identity, relational data, and media storage.
+The original architecture, documented in [`README.md`](../../README.md), [`system-design.md`](../system-design.md), and [`aws-architecture.md`](../aws-architecture.md), specified a **client-server application with a modular-monolith Django backend**, not microservices. The team planned to separate frontend presentation, backend business logic and authorization, authentication identity, relational data, and media storage.
 
 The initial AWS architecture already selected:
 
