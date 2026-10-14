@@ -254,20 +254,19 @@ Although these five issues are closed, **the full application is not yet complet
 
 ### 3.2 AWS Infrastructure and Deployment Preparation
 
-| Resource / Practice                                    | Current Status     | Verification Performed                                            |
-| ------------------------------------------------------ | ------------------ | ----------------------------------------------------------------- |
-| VPC, Internet Gateway, route table, two public subnets | Deployed           | CloudFormation network stack deployed and updated                 |
-| EC2 backend instance (`t3.micro`)                      | Deployed           | Backend stack completed successfully                              |
-| Docker on EC2                                          | Verified           | Docker version and service status checked via SSM                 |
-| AWS Systems Manager                                    | Verified           | Interactive session to EC2 established without inbound SSH        |
+| Resource / Practice | Current Status | Verification Performed |
+| --- | --- | --- |
+| EC2 backend instance (`t3.micro`) | Deployed — not publicly accessible | CloudFormation backend stack completed; EC2 instance provisioned successfully |
+| Docker on EC2 | Verified | Docker version and service status checked via Systems Manager |
+| AWS Systems Manager | Verified | Interactive session established without inbound SSH |
+| Dockerized Django | Verified locally only | API returned HTTP 200 in a local Docker container after migrations; deployment on EC2 not yet verified |
+| Public backend API endpoint | Not implemented | EC2 security group has no inbound rules; public API connectivity has not been established |
 | Amazon ECR                                             | Deployed           | `recipe-app-backend:midpoint-v1` image pushed                     |
-| Dockerized Django                                      | Verified locally   | API returned HTTP 200 after applying migrations in test container |
-| GitHub OIDC CloudFormation stack                       | Planned            | Deployment postponed until after midpoint evaluation             |
 | GitHub Actions deployment workflow                     | Planned            | Implementation postponed until after midpoint evaluation         |
 | Amazon RDS                                             | Not implemented    | SQLite currently used in local prototype                          |
 | AWS-hosted React frontend                              | Not verified       | S3/CloudFront hosting remains planned                             |
 
-**Infrastructure specifics:** AWS region `us-east-1`; VPC CIDR `10.0.0.0/16`; public subnets `10.0.1.0/24` and `10.0.2.0/24`. The backend EC2 security group has no inbound rules at the midpoint, so public access to Django is not yet available. The EC2 instance uses an IAM role for Systems Manager access and scoped ECR image retrieval.
+**Infrastructure specifics:** AWS region `us-east-1`; VPC CIDR `10.0.0.0/16`; public subnets `10.0.1.0/24` and `10.0.2.0/24`. The backend EC2 security group has no inbound rules at the midpoint, so public access to Django is **not yet available**. The EC2 instance uses an IAM role for Systems Manager access and scoped ECR image retrieval.
 
 The team has successfully provisioned the core AWS networking, compute, and container registry infrastructure using CloudFormation. GitHub OIDC authentication and automated CI/CD deployment remain planned improvements for the next development phase.
 
