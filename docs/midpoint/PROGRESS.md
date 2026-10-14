@@ -4,7 +4,8 @@
 **Evaluation date:** October 16, 2026  
 **Final project deadline:** November 13, 2026  
 **Repository:** https://github.com/sophia-dao/cloud_computing_proj  
-**Group number / members:** _Add before submission_
+**Group number:** _Add before submission_  
+**Group members:** Sophia Dao, Burhan Khokhar, Brooke Sayer, Huy Le
 
 > **Status convention:** **Implemented** means code or infrastructure exists; **Verified** means an observed test or check passed; **Planned** means not yet implemented. This report documents progress, not a claim that the entire application is deployed.
 
@@ -51,6 +52,24 @@ The team has **retained the original modular-monolith application architecture**
 | CI/CD | Potential GitHub Actions integration | GitHub OIDC provider created; deployment workflow paused | Establishes a credential-free authentication foundation, but **no automated deployment yet** |
 
 The project scope remains the same. These are **implementation refinements and a staged rollout**, not a redesign of the recipe recommendation model.
+
+
+#### Rationale behind the major decisions
+
+**1. Why EC2 rather than App Runner or ECS?** The original proposal specified a Dockerized AWS backend without committing to a particular compute service. During planning, the team considered managed container hosting, including AWS App Runner and Amazon ECS, but selected a single EC2 instance for the initial deployment. EC2 makes the underlying compute, operating system, Docker installation, networking, and IAM permissions visible and configurable. This supports the course objective of explaining how cloud components interact and lets the team provision a concrete, inspectable prototype. **Trade-off:** EC2 requires the team to maintain the host, manage application rollouts, and implement health monitoring and scaling separately; managed container services could reduce that operational burden. EC2 is an initial deployment choice, not evidence of high availability.
+
+**2. Why CloudFormation instead of manually creating AWS resources?** The team chose Infrastructure as Code to describe the network, container registry, compute instance, and identity configuration in version-controlled templates. CloudFormation helps make the infrastructure reproducible, documents resource dependencies and permissions, and reduces the risk of inconsistent manual configuration between deployments. The network, ECR, and backend resources were separated into stacks so they can be updated independently. **Trade-off:** Writing and troubleshooting templates adds initial work. In practice, the EC2 instance-type/Availability Zone mismatch required a network adjustment and redeployment, illustrating both the learning curve and the benefit of having the configuration recorded.
+
+**3. Why Docker, ECR, and Gunicorn?** Docker packages Django with its runtime dependencies into an image that can be built locally and transferred to AWS. Amazon ECR stores that image separately from the EC2 instance, which supports consistent image distribution and future versioned deployments. Gunicorn was configured to serve Django inside the container instead of relying on Django's development server. **Trade-off:** Containerization does not automatically handle environment variables, database migrations, secrets, process restarts, or health checks. The local HTTP 500 error before migrations demonstrated that deployment requires more than a successful image build.
+
+**4. Why defer RDS and use SQLite temporarily?** PostgreSQL on Amazon RDS remains the intended persistent database architecture. For the midpoint, the team prioritized proving the Django API, Docker packaging, and AWS infrastructure before introducing managed database networking, configuration, and cost. SQLite was sufficient for local model migrations and API smoke tests. **Trade-off:** A SQLite database inside a disposable container is not an acceptable long-term persistence strategy: data can be lost when containers are replaced, and it is unsuitable for the planned horizontally scalable backend. RDS is deferred, not removed from the design.
+
+**5. Why separate application-specific users from Cognito authentication?** The original design assigns identity and sign-in to Amazon Cognito while Django manages user profiles, preferences, resource ownership, and permissions. This keeps authentication credentials outside the application database and preserves a clear authorization boundary. The team implemented parts of the user/profile foundation before completing Cognito integration so those domain models and APIs could be tested independently. **Trade-off:** Authentication-to-user mapping and protected endpoint behavior remain integration risks and must be verified before the final release.
+
+**6. Why use Systems Manager and GitHub OIDC?** The EC2 instance is managed through AWS Systems Manager rather than opening an inbound SSH port, reducing the administrative network exposure of the prototype. The GitHub OIDC provider prepares for short-lived, federated AWS credentials in CI/CD instead of storing permanent AWS keys in repository secrets. **Trade-off:** These controls require careful IAM configuration and do not themselves constitute an operational deployment pipeline. At midpoint, SSM interactive access was verified and the OIDC provider was created, but the GitHub Actions build/deploy workflow is not implemented.
+
+**7. Why stage the work rather than integrate every cloud service immediately?** With the midpoint evaluation approaching, the team focused on independently demonstrable milestones: functioning backend APIs, a React foundation, local Docker execution, and provisioned AWS infrastructure. This makes progress easier to test and explain while preserving the original long-term architecture. **Trade-off:** The project still needs end-to-end integration, a persistent database, authentication, frontend hosting, and operational deployment before the final evaluation. The remaining integration work is a schedule risk, not a completed milestone.
+
 
 ### 2.3 Current midpoint architecture — provisioned versus running
 
