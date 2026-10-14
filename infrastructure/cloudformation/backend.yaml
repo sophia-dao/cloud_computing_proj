@@ -1,0 +1,126 @@
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Recipe Suggestion App - Django EC2 backend infrastructure
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+    Description: EC2 instance size for the Django backend
+
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Latest Amazon Linux 2023 AMI
+
+Resources:
+  BackendSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Recipe App Django backend
+      VpcId: !ImportValue RecipeApp-VpcId
+      SecurityGroupIngress: []
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+          Description: Allow outbound connectivity
+      Tags:
+        - Key: Name
+          Value: recipe-app-backend-sg
+
+  
+  BackendInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: IAM role for Recipe App EC2 backend
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: BackendECRPull
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                Resource: !ImportValue RecipeApp-BackendRepositoryArn
+      Tags:
+        - Key: Project
+          Value: RecipeSuggestionApp
+
+  BackendInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref BackendInstanceRole
+
+  BackendInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAmiId
+      SubnetId: !ImportValue RecipeApp-PublicSubnetAId
+      SecurityGroupIds:
+        - !Ref BackendSecurityGroup
+      IamInstanceProfile: !Ref BackendInstanceProfile
+      MetadataOptions:
+        HttpTokens: required
+        HttpEndpoint: enabled
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 12
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -euxo pipefail
+
+          dnf update -y
+          dnf install -y docker
+
+          systemctl enable --now docker
+
+          mkdir -p /opt/recipe-app/data
+
+          echo "EC2 Docker setup completed" > /opt/recipe-app/setup-status.txt
+      Tags:
+        - Key: Name
+          Value: recipe-app-backend
+        - Key: Project
+          Value: RecipeSuggestionApp
+
+Outputs:
+  InstanceId:
+    Description: Backend EC2 instance ID
+    Value: !Ref BackendInstance
+
+  PublicIp:
+    Description: Public IPv4 address of backend EC2 instance
+    Value: !GetAtt BackendInstance.PublicIp
+
+  SecurityGroupId:
+    Description: Backend security group ID
+    Value: !Ref BackendSecurityGroup
+
+  InstanceRoleArn:
+    Description: IAM role ARN for the backend EC2 instance
+    Value: !GetAtt BackendInstanceRole.Arn

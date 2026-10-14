@@ -1,100 +1,74 @@
 # AWS Infrastructure
 
-This directory contains the AWS infrastructure configuration for the **Recipe Suggestion App**, managed using AWS CloudFormation.
+Infrastructure as Code (IaC) for the **Recipe Suggestion App**, managed with AWS CloudFormation. Templates are version-controlled and deployed to **`us-east-1`**.
 
-Infrastructure as Code (IaC) allows the team to create, update, and maintain AWS resources consistently through version-controlled templates.
+> **Current state (October 14, 2026):** Networking, the ECR repository, and EC2 infrastructure have been deployed. The backend Docker image has been pushed to ECR. Running Django on EC2, public API access, and production database storage are **not yet complete**.
 
-## 1. Infrastructure Overview
+## 1. Architecture and deployment status
 
-**AWS Region:** `us-east-1`  
-**Infrastructure as Code:** AWS CloudFormation  
-**Backend hosting:** Amazon EC2 (planned)  
-**Frontend hosting:** Amazon S3 and CloudFront (planned)  
-**Database:** Amazon RDS (planned)
+| Component | Stack | Status |
+| --- | --- | --- |
+| Dedicated VPC, Internet Gateway, routing, two public subnets | `recipe-app-network` | Deployed |
+| Backend container registry | `recipe-app-ecr` | Deployed; `midpoint-v1` image pushed |
+| EC2, security group, IAM instance role | `recipe-app-backend` | Deployed (`CREATE_COMPLETE`) |
+| Django container on EC2 | — | Pending |
+| Persistent production database (Amazon RDS) | — | Planned |
+| React frontend (S3 + CloudFront) | — | Planned |
+| CI/CD | — | Planned |
 
-### Directory Structure
+### Directory structure
 
 ```text
 infrastructure/
 ├── README.md
 └── cloudformation/
-    └── network.yaml
+    ├── network.yaml
+    ├── ecr.yaml
+    └── backend.yaml
 ```
 
-Additional CloudFormation templates will be added as the project progresses.
+### Network configuration
 
-### Deployment Status
+| Resource | Configuration |
+| --- | --- |
+| VPC | `10.0.0.0/16` |
+| Original public subnet | `10.0.1.0/24` (currently `us-east-1e`) |
+| Backend public subnet | `10.0.2.0/24` (`us-east-1a`) |
+| Internet Gateway | Attached to the dedicated VPC |
+| Public route table | Default route `0.0.0.0/0` to Internet Gateway |
+| Route table associations | Both public subnets |
+| Backend instance | Single EC2 instance in `us-east-1a` |
 
-| Component | CloudFormation Stack | Status |
-|---|---|---|
-| VPC and networking | `recipe-app-network` | Deployed and verified |
-| EC2 backend | TBD | Planned |
-| Relational database | TBD | Planned |
-| CI/CD pipeline | TBD | Planned |
+The second subnet was added because `t3.micro` was unavailable in `us-east-1e` for this account. **Two subnets do not make the application highly available:** only one EC2 instance is deployed.
 
-## 2. Prerequisites
+The backend security group currently has **no inbound rules**. SSH (port 22) is not exposed; EC2 administration uses AWS Systems Manager Session Manager. The API is not publicly reachable yet.
 
-Before deploying infrastructure, ensure that:
+## 2. Prerequisites and authentication
 
-- AWS CLI v2 is installed.
-- AWS IAM Identity Center access is configured.
-- The developer has appropriate AWS permissions.
-- The AWS CLI profile points to the correct AWS account.
-- Commands are executed from the repository root unless otherwise specified.
+- AWS CLI v2 installed and configured for IAM Identity Center (SSO).
+- AWS account permissions for CloudFormation, VPC, ECR, EC2, and IAM.
+- Docker installed locally to build and push images.
+- Session Manager plugin installed locally to open interactive EC2 sessions.
+- Run repository-relative commands from the **repository root**.
 
-See [IAM Access Control](../docs/aws/iam-access-control.md) for identity and authentication configuration.
-
-The examples below use the local AWS CLI profile `recipe-app`. Each developer may use their own profile name.
-
-## 3. AWS Authentication
-
-Authenticate using IAM Identity Center:
+The commands below use the local profile `recipe-app`; other developers should substitute their own profile name.
 
 ```bash
 aws sso login --profile recipe-app
-```
-
-Verify the current AWS identity:
-
-```bash
 aws sts get-caller-identity --profile recipe-app
-```
-
-Verify the configured Region:
-
-```bash
 aws configure get region --profile recipe-app
 ```
 
-Expected Region:
+Expected region: `us-east-1`. SSO uses temporary credentials rather than permanent IAM user access keys.
 
-```text
-us-east-1
-```
+See [IAM Access Control](../docs/aws/iam-access-control.md) for project access-control documentation.
 
-AWS CLI SSO authentication uses temporary credentials rather than permanent IAM access keys.
+## 3. VPC and networking
 
-## 4. Network Infrastructure
+**Template:** `infrastructure/cloudformation/network.yaml`  
+**Stack:** `recipe-app-network`
 
-**Template:** `cloudformation/network.yaml`  
-**Stack:** `recipe-app-network`  
-**Deployment date:** October 13, 2026  
-**Status:** Deployed and verified
-
-### Network Configuration
-
-| Resource | Configuration |
-|---|---|
-| VPC | `10.0.0.0/16` |
-| Public subnet | `10.0.1.0/24` |
-| Internet Gateway | Attached to VPC |
-| Public route table | Configured |
-| Default route | `0.0.0.0/0` through Internet Gateway |
-| Subnet association | Public subnet associated with public route table |
-
-The project uses a dedicated VPC rather than modifying the account's default VPC.
-
-### 4.1 Inspect Existing VPCs
+### Inspect existing VPCs
 
 ```bash
 aws ec2 describe-vpcs \
@@ -104,31 +78,14 @@ aws ec2 describe-vpcs \
   --output table
 ```
 
-This command lists VPC IDs, CIDR blocks, and whether each VPC is the default.
-
-### 4.2 Validate the CloudFormation Template
+### Validate and deploy
 
 ```bash
 aws cloudformation validate-template \
   --template-body file://infrastructure/cloudformation/network.yaml \
   --region us-east-1 \
   --profile recipe-app
-```
 
-Expected output:
-
-```json
-{
-  "Parameters": [],
-  "Description": "Recipe Suggestion App - Initial VPC infrastructure"
-}
-```
-
-Validation checks whether AWS CloudFormation accepts the template's structure. It does not create resources or guarantee deployment success.
-
-### 4.3 Deploy the Network Stack
-
-```bash
 aws cloudformation deploy \
   --template-file infrastructure/cloudformation/network.yaml \
   --stack-name recipe-app-network \
@@ -136,17 +93,9 @@ aws cloudformation deploy \
   --profile recipe-app
 ```
 
-Successful deployment output:
+Validation checks the template format and references that CloudFormation can validate; it does **not** guarantee a successful deployment.
 
-```text
-Waiting for changeset to be created..
-Waiting for stack create/update to complete
-Successfully created/updated stack - recipe-app-network
-```
-
-The same command can be used to deploy subsequent template updates. Review proposed infrastructure changes before applying updates.
-
-### 4.4 Verify Stack Status
+### Verify the network
 
 ```bash
 aws cloudformation describe-stacks \
@@ -155,41 +104,14 @@ aws cloudformation describe-stacks \
   --profile recipe-app \
   --query 'Stacks[0].[StackName,StackStatus]' \
   --output table
-```
 
-Verified result:
-
-```text
-recipe-app-network
-CREATE_COMPLETE
-```
-
-### 4.5 Verify Stack Resources
-
-```bash
 aws cloudformation describe-stack-resources \
   --stack-name recipe-app-network \
   --region us-east-1 \
   --profile recipe-app \
   --query 'StackResources[*].[LogicalResourceId,ResourceType,ResourceStatus]' \
   --output table
-```
 
-The deployment successfully created all seven CloudFormation resources:
-
-- `RecipeAppVPC`
-- `PublicSubnet`
-- `InternetGateway`
-- `InternetGatewayAttachment`
-- `PublicRouteTable`
-- `PublicDefaultRoute`
-- `PublicSubnetRouteTableAssociation`
-
-All resources were verified with status `CREATE_COMPLETE`.
-
-### 4.6 Inspect Stack Outputs
-
-```bash
 aws cloudformation describe-stacks \
   --stack-name recipe-app-network \
   --region us-east-1 \
@@ -198,124 +120,276 @@ aws cloudformation describe-stacks \
   --output table
 ```
 
-Verified deployment outputs:
+Known outputs:
 
-| Output | Export Name | Value |
-|---|---|---|
-| VPC ID | `RecipeApp-VpcId` | `vpc-0197766fbe7061905` |
-| Public subnet ID | `RecipeApp-PublicSubnetId` | `subnet-0f0f85016b68912bc` |
+| Export | Purpose |
+| --- | --- |
+| `RecipeApp-VpcId` | Shared VPC reference |
+| `RecipeApp-PublicSubnetId` | Original public subnet |
+| `RecipeApp-PublicSubnetAId` | Backend public subnet (`us-east-1a`) |
+| `RecipeApp-PublicRouteTableId` | Public route table |
 
-Other CloudFormation stacks can reference these resources through `Fn::ImportValue`.
+The deployed VPC ID is `vpc-0197766fbe7061905`. Resource IDs may change if stacks are recreated; prefer CloudFormation exports over hardcoding IDs in templates.
 
-These IDs represent the current deployment and may change if resources are recreated.
+## 4. Amazon ECR
 
-## 5. Infrastructure Updates
+**Template:** `infrastructure/cloudformation/ecr.yaml`  
+**Stack:** `recipe-app-ecr`  
+**Repository:** `recipe-app-backend`
 
-When modifying an existing CloudFormation template:
+The repository stores versioned backend Docker images, uses immutable tags, enables scanning on push, and encrypts images at rest.
 
-1. Edit the relevant YAML file.
-2. Validate the updated template.
-3. Review the proposed changes.
-4. Deploy the updated stack.
-5. Verify stack status and resource health.
-6. Update the documentation if the architecture changes.
-
-For safer updates, use CloudFormation change sets to inspect proposed modifications before execution.
-
-Avoid making manual changes to CloudFormation-managed resources because they can cause configuration drift.
-
-## 6. Infrastructure Cleanup
-
-When the infrastructure is no longer needed, a CloudFormation stack can be deleted.
-
-**Warning:** Deleting stacks can remove infrastructure and associated data. Confirm dependencies and backups before running cleanup commands.
-
-Network stack deletion:
+### Validate and deploy
 
 ```bash
-aws cloudformation delete-stack \
-  --stack-name recipe-app-network \
+aws cloudformation validate-template \
+  --template-body file://infrastructure/cloudformation/ecr.yaml \
+  --region us-east-1 \
+  --profile recipe-app
+
+aws cloudformation deploy \
+  --template-file infrastructure/cloudformation/ecr.yaml \
+  --stack-name recipe-app-ecr \
   --region us-east-1 \
   --profile recipe-app
 ```
 
-Wait for deletion to complete:
+### Verify repository and image
 
 ```bash
+aws ecr describe-repositories \
+  --repository-names recipe-app-backend \
+  --region us-east-1 \
+  --profile recipe-app
+
+aws ecr describe-images \
+  --repository-name recipe-app-backend \
+  --image-ids imageTag=midpoint-v1 \
+  --region us-east-1 \
+  --profile recipe-app
+```
+
+### Build and push from a development machine
+
+The EC2 template uses an x86_64 Amazon Linux 2023 AMI, so the image must support `linux/amd64`.
+
+```bash
+aws ecr get-login-password \
+  --region us-east-1 \
+  --profile recipe-app \
+  | docker login \
+      --username AWS \
+      --password-stdin \
+      362176666546.dkr.ecr.us-east-1.amazonaws.com
+
+docker build --platform linux/amd64 \
+  -t recipe-app-backend:midpoint-v1 \
+  ./backend
+
+docker tag recipe-app-backend:midpoint-v1 \
+  362176666546.dkr.ecr.us-east-1.amazonaws.com/recipe-app-backend:midpoint-v1
+
+docker push \
+  362176666546.dkr.ecr.us-east-1.amazonaws.com/recipe-app-backend:midpoint-v1
+```
+
+Use a **new image tag** for future releases because the ECR repository uses immutable tags.
+
+CloudFormation exports the repository URI and ARN for use by other stacks. The EC2 instance role has ECR pull permissions, not push permissions.
+
+## 5. EC2 backend infrastructure
+
+**Template:** `infrastructure/cloudformation/backend.yaml`  
+**Stack:** `recipe-app-backend`  
+**Instance type:** `t3.micro`  
+**Operating system:** Amazon Linux 2023
+
+The template provisions:
+
+- An EC2 instance in `RecipeApp-PublicSubnetAId` (`us-east-1a`).
+- An encrypted 12 GiB gp3 root EBS volume.
+- A security group with no inbound rules initially.
+- An IAM instance profile for Systems Manager and read-only ECR image retrieval.
+- IMDSv2-required instance metadata.
+- User data that installs and starts Docker and creates `/opt/recipe-app/data`.
+
+### Validate and deploy
+
+```bash
+aws cloudformation validate-template \
+  --template-body file://infrastructure/cloudformation/backend.yaml \
+  --region us-east-1 \
+  --profile recipe-app
+
+aws cloudformation deploy \
+  --template-file infrastructure/cloudformation/backend.yaml \
+  --stack-name recipe-app-backend \
+  --capabilities CAPABILITY_IAM \
+  --region us-east-1 \
+  --profile recipe-app
+```
+
+### Verify EC2
+
+```bash
+aws cloudformation describe-stacks \
+  --stack-name recipe-app-backend \
+  --region us-east-1 \
+  --profile recipe-app \
+  --query 'Stacks[0].[StackStatus,Outputs]' \
+  --output json
+
+aws ec2 describe-instances \
+  --instance-ids i-0f80e33afb9d7dd0a \
+  --region us-east-1 \
+  --profile recipe-app \
+  --query 'Reservations[].Instances[].[InstanceId,State.Name,Placement.AvailabilityZone,PublicIpAddress]' \
+  --output table
+```
+
+**Verified stack status:** `CREATE_COMPLETE`  
+**Deployed instance ID:** `i-0f80e33afb9d7dd0a`  
+**Reported public IPv4:** `184.192.191.75` (may change after instance stop/start)
+
+The instance's public IP does **not** mean the API is publicly accessible: the security group currently denies inbound connections.
+
+### Verify Systems Manager registration
+
+```bash
+aws ssm describe-instance-information \
+  --filters Key=InstanceIds,Values=i-0f80e33afb9d7dd0a \
+  --region us-east-1 \
+  --profile recipe-app \
+  --query 'InstanceInformationList[].[InstanceId,PingStatus,PlatformName]' \
+  --output table
+```
+
+**Verified result:** `Online` / `Amazon Linux`.
+
+## 6. Connect to EC2 with Session Manager
+
+Session Manager avoids opening SSH port 22 and does not require an EC2 SSH key pair. The local Session Manager plugin is required for AWS CLI interactive sessions.
+
+### Install and verify the plugin (macOS)
+
+```bash
+brew install --cask session-manager-plugin
+session-manager-plugin
+```
+
+If the Homebrew cask is unavailable, follow the [AWS macOS installation guide](https://docs.aws.amazon.com/systems-manager/latest/userguide/install-plugin-macos-overview.html).
+
+### Open a session
+
+```bash
+aws ssm start-session \
+  --target i-0f80e33afb9d7dd0a \
+  --region us-east-1 \
+  --profile recipe-app
+```
+
+Inside the instance, check the Docker installation and bootstrap status:
+
+```bash
+docker --version
+sudo systemctl is-active docker
+cat /opt/recipe-app/setup-status.txt
+```
+
+Expected bootstrap message: `EC2 Docker setup completed`. **These checks are pending confirmation.**
+
+### Pull the backend image on EC2 (next step)
+
+The following commands run **inside EC2**, where the instance role provides ECR permissions. Do not use the local SSO profile on EC2.
+
+```bash
+aws ecr get-login-password --region us-east-1 \
+  | sudo docker login \
+      --username AWS \
+      --password-stdin \
+      362176666546.dkr.ecr.us-east-1.amazonaws.com
+
+sudo docker pull \
+  362176666546.dkr.ecr.us-east-1.amazonaws.com/recipe-app-backend:midpoint-v1
+```
+
+**Not yet complete:** persistent SQLite configuration, secure runtime secrets, database migrations, container startup, and remote API testing. The current Docker image's default database storage should not be assumed persistent across container replacement.
+
+## 7. Updating infrastructure
+
+1. Edit the appropriate CloudFormation template.
+2. Validate the template.
+3. Review the proposed changes (use CloudFormation change sets for important updates).
+4. Deploy the stack.
+5. Verify stack outputs and resource health.
+6. Update this README and architecture documentation.
+
+Avoid manual changes to CloudFormation-managed resources because they can cause configuration drift.
+
+### Troubleshooting failed stack creation
+
+A stack in `ROLLBACK_COMPLETE` cannot be updated. Inspect the failure **before** deleting it:
+
+```bash
+aws cloudformation describe-stack-events \
+  --stack-name recipe-app-backend \
+  --region us-east-1 \
+  --profile recipe-app \
+  --query "StackEvents[?ResourceStatus=='CREATE_FAILED'].[Timestamp,LogicalResourceId,ResourceStatusReason]" \
+  --output table
+```
+
+During the initial backend deployment, `t3.micro` was unavailable in the original subnet's Availability Zone (`us-east-1e`). A second subnet in `us-east-1a` resolved this issue.
+
+## 8. Planned improvements
+
+- Run the Django/Gunicorn container from ECR on EC2 with persistent storage and environment-based secrets.
+- Expose the API through a controlled HTTPS endpoint; do not expose Django administration or SSH unnecessarily.
+- Replace temporary SQLite storage with a managed database such as Amazon RDS.
+- Host the React frontend using Amazon S3 and CloudFront.
+- Add automated builds and deployments (CI/CD).
+- Evaluate private subnets, load balancing, Auto Scaling, multiple EC2 instances, and CloudWatch alarms for security, resilience, and scalability.
+
+An architecture diagram documenting VPC CIDRs, subnets, routing, EC2 placement, security boundaries, and future database connectivity is planned.
+
+## 9. Security and cost notes
+
+- Use IAM Identity Center and short-lived credentials for developer access.
+- Never commit AWS keys, Django secret keys, or other secrets.
+- Keep ECR pull permissions scoped to the backend repository.
+- Keep inbound security group access closed until a deliberate API exposure design is in place.
+- Prefer Session Manager over public SSH access.
+- EC2, EBS, public IPv4 addresses, ECR storage, and data transfer may incur AWS charges while resources exist.
+- Use the deployed CloudFormation outputs as the source of truth for instance IDs and addresses.
+
+## 10. Cleanup (destructive)
+
+> **Warning:** Stack deletion can remove infrastructure and application data. Back up data and confirm team approval before cleanup. Do not run these commands against active resources.
+
+The backend stack imports resources from the network and ECR stacks. Delete dependent stacks **before** deleting the network or registry stacks. An ECR repository containing images may block stack deletion unless images are removed first; the template intentionally sets `EmptyOnDelete: false`.
+
+```bash
+# Delete the backend stack first.
+aws cloudformation delete-stack \
+  --stack-name recipe-app-backend \
+  --region us-east-1 \
+  --profile recipe-app
+
+aws cloudformation wait stack-delete-complete \
+  --stack-name recipe-app-backend \
+  --region us-east-1 \
+  --profile recipe-app
+
+# Only after dependent resources are removed:
+aws cloudformation delete-stack \
+  --stack-name recipe-app-network \
+  --region us-east-1 \
+  --profile recipe-app
+
 aws cloudformation wait stack-delete-complete \
   --stack-name recipe-app-network \
   --region us-east-1 \
   --profile recipe-app
 ```
 
-Dependent stacks, such as the future EC2 backend stack, must be removed before deleting the network stack.
-
-Do not run cleanup commands against active project infrastructure without team approval.
-
-## 7. Planned Infrastructure
-
-### Backend Deployment
-
-A future CloudFormation template will provision the Django backend on Amazon EC2.
-
-Planned components include:
-
-- EC2 instance
-- Security group
-- IAM instance role
-- AWS Systems Manager access
-- Docker-based Django deployment
-
-### Database
-
-Amazon RDS is planned for persistent relational storage.
-
-SQLite may be used temporarily during the initial cloud demonstration.
-
-### Frontend Hosting
-
-React frontend hosting is planned using Amazon S3 and CloudFront.
-
-### CI/CD
-
-AWS CodePipeline and CodeBuild are being considered for automated application builds and deployment.
-
-### Scalability
-
-Future improvements may include:
-
-- Multiple Availability Zones
-- Application Load Balancer
-- EC2 Auto Scaling
-- Private subnets
-- CloudWatch monitoring and alarms
-
-These components are not part of the initial network deployment.
-
-## 8. Architecture Documentation
-
-The AWS architecture will be documented separately, including a VPC network diagram showing:
-
-- VPC CIDR block
-- Public and future private subnets
-- Internet Gateway
-- Routing configuration
-- EC2 placement
-- Security boundaries
-- Future database connectivity
-
-See [AWS Architecture](../docs/aws-architecture.md) for the overall cloud design.
-
-The detailed network diagram will be added after the relevant resources have been deployed and verified.
-
-## 9. Security Notes
-
-- Use IAM Identity Center for developer authentication.
-- Avoid permanent IAM access keys.
-- Never commit credentials or authentication tokens.
-- Grant permissions according to development responsibilities.
-- Use dedicated IAM roles for AWS services.
-- Restrict network access through security groups.
-- Prefer AWS Systems Manager over publicly exposed SSH access.
-
-For additional information, see [IAM Access Control](../docs/aws/iam-access-control.md).
+The ECR stack requires separate cleanup after its images and cross-stack dependencies have been handled. No cleanup is necessary during active development.
