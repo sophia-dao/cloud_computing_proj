@@ -16,57 +16,107 @@ The planned user roles are **Guest**, **Registered User**, and **Administrator**
 
 ## 2. Architecture and changes from the original plan
 
-### 2.1 Original proposal and evolving design
+### 2.1 Original system design
 
-The initial proposal established a cloud-hosted recipe recommendation system with a React frontend, Django backend, authentication, persistent data storage, and AWS deployment. During implementation, the team refined how these pieces would be hosted and connected.
+The original `README.md` and `system-design.md` describe a **client-server application with a modular-monolith Django backend**, not a microservices architecture. The core design separates React presentation, Django business logic and authorization, Cognito identity, relational data, and media storage. The intended production technologies were **React hosted on S3/CloudFront**, **Django REST Framework in Docker on AWS**, **PostgreSQL on Amazon RDS**, **Amazon Cognito**, and **Amazon S3 for media**.
 
-| Area | Earlier direction | Current decision / midpoint status | Reason or impact |
-| --- | --- | --- | --- |
-| Backend hosting | AWS-hosted backend; managed container services were considered | **Amazon EC2** selected; instance deployed | Gives the team direct control of Docker and deployment steps; increases responsibility for instance operations |
-| Infrastructure setup | AWS infrastructure to be configured | **AWS CloudFormation** templates for networking, ECR, EC2, and GitHub OIDC | Repeatable infrastructure changes and version-controlled configuration |
-| Backend packaging | Django application | **Docker image**, with Gunicorn as the application server | Consistent local runtime and a deployable image artifact |
-| Container distribution | Deployment workflow to be determined | **Amazon ECR** repository deployed; image uploaded | Separates image building from compute hosting |
-| Authentication | Cognito-based authentication planned | User/profile code has been worked on; **Cognito integration remains unverified** | Allows foundational profile work to progress while authentication integration remains a separate task |
-| Data persistence | Persistent cloud database planned | **SQLite used for local prototype testing; Amazon RDS postponed** | Prioritizes demonstrable API, container, and infrastructure progress; production persistence remains a gap |
-| Deployment automation | Automated delivery envisioned | **GitHub OIDC provider and IAM role configuration initiated; workflow not implemented** | Establishes a secure foundation without claiming CI/CD is operational |
-| Frontend hosting | AWS-hosted frontend | **React frontend foundation implemented locally; S3/CloudFront deployment planned** | Cloud hosting and end-to-end integration remain future milestones |
-
-**Important distinction:** The project goal has not changed. The architecture has been adjusted to make the prototype achievable, understandable, and demonstrable within the course schedule. Some decisions (such as EC2 instead of a managed container service) trade operational simplicity for greater control and learning opportunities.
-
-### 2.2 Current infrastructure architecture
-
-```text
-                 Local development / testing
-              +-------------------------------+
-              | React UI (development)        |
-              | Django REST API + SQLite      |
-              | Docker + automated tests      |
-              +-------------------------------+
-                              |
-                         Docker image
-                              v
-+------------------------------ AWS (us-east-1) -------------------------------+
-| Amazon ECR: recipe-app-backend image repository                               |
-|                                                                             |
-| VPC 10.0.0.0/16                                                             |
-|  +--------------------------+  +-----------------------------------------+  |
-|  | Public subnet            |  | Public subnet                           |  |
-|  | 10.0.1.0/24              |  | 10.0.2.0/24                             |  |
-|  |                          |  | EC2 t3.micro (Amazon Linux 2023)        |  |
-|  |                          |  | Docker installed, SSM managed          |  |
-|  +--------------------------+  +-----------------------------------------+  |
-|       Shared public route table / Internet Gateway                          |
-|                                                                             |
-| IAM roles + Systems Manager: instance administration without inbound SSH    |
-| CloudFormation: repeatable infrastructure provisioning                       |
-| GitHub OIDC provider: identity foundation for future CI/CD                  |
-+-----------------------------------------------------------------------------+
-
-NOT YET COMPLETE: automated ECR -> EC2 rollout; Django service on EC2;
-public API endpoint; S3/CloudFront frontend; RDS; integrated Cognito login.
+```mermaid
+flowchart TD
+    U[User / Browser] --> F[React frontend<br/>S3 + CloudFront - planned]
+    F -->|HTTPS / REST / JSON| API[Django REST Framework<br/>Docker on AWS - planned]
+    API --> DB[(PostgreSQL<br/>Amazon RDS - planned)]
+    API --> S3[(Amazon S3<br/>Media - planned)]
+    F <-->|Sign-in / tokens| C[Amazon Cognito - planned]
+    API -.->|Validate identity| C
+    subgraph Backend domains
+      API --> D[Users / Ingredients / Recipes / Inventory<br/>Recommendations / Reviews / Shopping]
+    end
 ```
 
-The diagram distinguishes **provisioned infrastructure** from **deployed application functionality**. An EC2 instance existing in AWS does not, by itself, demonstrate that Django is running on it.
+*Figure 1. Original target application architecture. This is a design diagram, **not** a diagram of services already running in AWS.*
+
+### 2.2 Architecture changes and design decisions
+
+The team has **retained the original modular-monolith application architecture**. The significant changes concern the hosting choice, infrastructure provisioning, and order of integration.
+
+| Area | Original design | Midpoint decision / actual status | Reason and trade-off |
+| --- | --- | --- | --- |
+| Backend compute | Dockerized backend on AWS; exact hosting method not fixed in original documents | **Amazon EC2** selected and provisioned; Docker installed | Direct control and transparent deployment steps; team must manage the host and availability |
+| Infrastructure | AWS hosting and infrastructure envisioned | **CloudFormation** templates used for VPC/networking, ECR, EC2, and OIDC | Repeatable and reviewable infrastructure-as-code |
+| Image distribution | Docker-based deployment planned | **Amazon ECR** repository deployed; backend image pushed | Versioned container artifacts, separate from runtime |
+| Application server | Django backend specified | **Gunicorn** configured in the Docker image | More appropriate serving process than Django development server |
+| Database | PostgreSQL on **Amazon RDS** | **SQLite for local prototype testing**; RDS not provisioned | Allows early API testing; not the intended persistent production database |
+| Frontend hosting | **Amazon S3 + CloudFront** | React foundation developed locally; hosting not yet verified | Prioritized UI implementation before cloud integration |
+| Authentication | **Amazon Cognito** identity + Django authorization | User/profile foundation tested; Cognito integration not yet verified | Authentication remains a separate integration dependency |
+| CI/CD | Potential GitHub Actions integration | GitHub OIDC provider created; deployment workflow paused | Establishes a credential-free authentication foundation, but **no automated deployment yet** |
+
+The project scope remains the same. These are **implementation refinements and a staged rollout**, not a redesign of the recipe recommendation model.
+
+### 2.3 Current midpoint architecture — provisioned versus running
+
+```mermaid
+flowchart TB
+    subgraph LOCAL[Local development and testing]
+      REACT[React frontend<br/>local development]
+      DJ[Django REST API<br/>Docker / Gunicorn<br/>local API tested]
+      SQL[(SQLite<br/>local test data)]
+      REACT -.->|API integration in progress| DJ
+      DJ --> SQL
+    end
+    DJ -->|Build and push image - verified| ECR
+    subgraph AWS[AWS us-east-1 - provisioned infrastructure]
+      ECR[(Amazon ECR<br/>recipe-app-backend)]
+      OIDC[GitHub OIDC provider<br/>created]
+      CF[CloudFormation<br/>network / ECR / backend]
+      SSM[AWS Systems Manager<br/>session verified]
+      subgraph VPC[VPC 10.0.0.0/16]
+        IGW[Internet Gateway<br/>public route table]
+        subgraph AZE[Public subnet 10.0.1.0/24]
+          EMPTY[No backend instance]
+        end
+        subgraph AZA[Public subnet 10.0.2.0/24]
+          EC2[EC2 t3.micro<br/>Docker installed<br/>No inbound SG rules]
+        end
+        IGW --- AZE
+        IGW --- AZA
+      end
+      SSM -->|managed instance| EC2
+      CF -.->|provisions| VPC
+    end
+    ECR -.->|Automated pull and rollout NOT implemented| EC2
+    OIDC -.->|GitHub Actions workflow NOT implemented| ECR
+```
+
+*Figure 2. Verified midpoint infrastructure and local prototype. Dashed links indicate incomplete integration or provisioning relationships rather than confirmed application traffic. The EC2 host is provisioned, but Django running on EC2 and a public API endpoint have **not** been verified.*
+
+### 2.4 Application architecture retained from the original design
+
+The backend continues to use **domain-oriented Django modules**. The original design defines a shared canonical `Ingredient`, reusable `Tag` classifications, and separate `Allergen` entities. Both Guest and Registered User recommendation flows are designed to use the same backend `RecommendationService` with `AVAILABLE_ONLY` and `PARTIAL_MATCH` modes.
+
+```mermaid
+flowchart LR
+    G[Guest selected ingredients<br/>temporary React state] --> IN[Canonical Ingredient IDs]
+    R[Registered user's saved inventory<br/>planned persistent data] --> IN
+    IN --> RS[RecommendationService<br/>backend - planned integration]
+    FILTER[Tags / Allergens / Match mode] --> RS
+    RS --> REC[Recipe results<br/>match score + missing ingredients]
+    REC --> SHOP[Shopping list generation<br/>planned]
+```
+
+*Figure 3. Intended recommendation data flow from the original system design. The Ingredient API foundation has been implemented; this diagram does **not** claim that the full recommendation service is complete.*
+
+### 2.5 Planned automated deployment workflow (not yet operational)
+
+```mermaid
+flowchart LR
+    GH[GitHub main branch] --> TEST[GitHub Actions<br/>Django tests]
+    TEST --> BUILD[Docker build<br/>linux/amd64]
+    BUILD --> REG[Amazon ECR<br/>image by commit SHA]
+    REG --> CMD[SSM Run Command]
+    CMD --> EC2[EC2 Docker<br/>pull / restart / health check]
+```
+
+*Figure 4. Proposed CI/CD pipeline. The GitHub OIDC provider exists, but the GitHub Actions workflow and automated EC2 rollout are **not implemented** as of the midpoint.*
 
 ## 3. Implementation progress
 
