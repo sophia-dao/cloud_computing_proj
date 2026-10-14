@@ -1,0 +1,31 @@
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Recipe Suggestion App - Backend Docker image registry
+
+Resources:
+  BackendRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: recipe-app-backend
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EncryptionConfiguration:
+        EncryptionType: AES256
+      EmptyOnDelete: false
+      Tags:
+        - Key: Project
+          Value: RecipeSuggestionApp
+
+Outputs:
+  RepositoryUri:
+    Description: URI used to push and pull backend Docker images
+    Value: !GetAtt BackendRepository.RepositoryUri
+    Export:
+      Name: RecipeApp-BackendRepositoryUri
+
+  RepositoryArn:
+    Description: Backend ECR repository ARN
+    Value: !GetAtt BackendRepository.Arn
+    Export:
+      Name: RecipeApp-BackendRepositoryArn

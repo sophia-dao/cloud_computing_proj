@@ -1,8 +1,13 @@
 
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Recipe Suggestion App - Initial VPC infrastructure
+Description: Recipe Suggestion App - VPC and public subnet infrastructure
 
 Resources:
+
+  # ============================================================
+  # VPC
+  # ============================================================
+
   RecipeAppVPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -14,6 +19,10 @@ Resources:
           Value: recipe-app-vpc
         - Key: Project
           Value: RecipeSuggestionApp
+
+  # ============================================================
+  # Internet Gateway
+  # ============================================================
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -28,6 +37,11 @@ Resources:
       VpcId: !Ref RecipeAppVPC
       InternetGatewayId: !Ref InternetGateway
 
+  # ============================================================
+  # Public Subnets
+  # ============================================================
+
+  # Original public subnet (currently in us-east-1e)
   PublicSubnet:
     Type: AWS::EC2::Subnet
     Properties:
@@ -38,6 +52,22 @@ Resources:
         - Key: Name
           Value: recipe-app-public-subnet
 
+  # Second public subnet for EC2 (us-east-1a)
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref RecipeAppVPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: us-east-1a
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: recipe-app-public-subnet-a
+
+  # ============================================================
+  # Public Route Table
+  # ============================================================
+
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -46,6 +76,7 @@ Resources:
         - Key: Name
           Value: recipe-app-public-rt
 
+  # Default route to the Internet Gateway
   PublicDefaultRoute:
     Type: AWS::EC2::Route
     DependsOn: InternetGatewayAttachment
@@ -54,13 +85,30 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
 
+  # ============================================================
+  # Route Table Associations
+  # ============================================================
+
+  # Associate original public subnet with public route table
   PublicSubnetRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PublicSubnet
       RouteTableId: !Ref PublicRouteTable
 
+  # Associate second public subnet with public route table
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+# ==============================================================
+# Outputs
+# ==============================================================
+
 Outputs:
+
   VpcId:
     Description: Recipe App VPC ID
     Value: !Ref RecipeAppVPC
@@ -68,7 +116,19 @@ Outputs:
       Name: RecipeApp-VpcId
 
   PublicSubnetId:
-    Description: Public subnet ID
+    Description: Original public subnet ID
     Value: !Ref PublicSubnet
     Export:
       Name: RecipeApp-PublicSubnetId
+
+  PublicSubnetAId:
+    Description: Public subnet ID in us-east-1a
+    Value: !Ref PublicSubnetA
+    Export:
+      Name: RecipeApp-PublicSubnetAId
+
+  PublicRouteTableId:
+    Description: Public route table ID
+    Value: !Ref PublicRouteTable
+    Export:
+      Name: RecipeApp-PublicRouteTableId
