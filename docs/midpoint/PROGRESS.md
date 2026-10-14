@@ -7,7 +7,10 @@
 **Group number:** _Add before submission_  
 **Group members:** Sophia Dao, Burhan Khokhar, Brooke Sayer, Huy Le
 
-> **Status convention:** **Implemented** means code or infrastructure exists; **Verified** means an observed test or check passed; **Planned** means not yet implemented. This report documents progress, not a claim that the entire application is deployed.
+> **Status convention:** <br>
+> **- Implemented** code or infrastructure exists <br>
+> **- Verified** an observed test or check passed <br>
+> **- Planned** not yet implemented. This report documents progress, not a claim that the entire application is deployed. 
 
 ## 1. Project overview
 
