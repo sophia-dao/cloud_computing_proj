@@ -1,27 +1,54 @@
-# AWS Infrastructure Deployment Guide
+# AWS Infrastructure
 
-## Overview
+This directory contains the AWS infrastructure configuration for the **Recipe Suggestion App**, managed using AWS CloudFormation.
 
-This directory contains the Infrastructure as Code (IaC) configuration for the Recipe Suggestion App.
+Infrastructure as Code (IaC) allows the team to create, update, and maintain AWS resources consistently through version-controlled templates.
 
-We use AWS CloudFormation to provision and manage AWS resources consistently and reproducibly.
+## 1. Infrastructure Overview
 
 **AWS Region:** `us-east-1`  
-**AWS CLI Profile:** `recipe-app`  
-**Infrastructure Tool:** AWS CloudFormation
+**Infrastructure as Code:** AWS CloudFormation  
+**Backend hosting:** Amazon EC2 (planned)  
+**Frontend hosting:** Amazon S3 and CloudFront (planned)  
+**Database:** Amazon RDS (planned)
 
-## Prerequisites
+### Directory Structure
 
-- AWS CLI v2 installed
-- AWS IAM Identity Center account configured
-- AWS CLI SSO profile created
-- Appropriate AWS permissions for CloudFormation and EC2
+```text
+infrastructure/
+├── README.md
+└── cloudformation/
+    └── network.yaml
+```
 
-For authentication configuration, see [IAM Access Control](../docs/aws/iam-access-control.md).
+Additional CloudFormation templates will be added as the project progresses.
 
-## 1. Verify AWS Authentication
+### Deployment Status
 
-Authenticate if necessary:
+| Component | CloudFormation Stack | Status |
+|---|---|---|
+| VPC and networking | `recipe-app-network` | Deployed and verified |
+| EC2 backend | TBD | Planned |
+| Relational database | TBD | Planned |
+| CI/CD pipeline | TBD | Planned |
+
+## 2. Prerequisites
+
+Before deploying infrastructure, ensure that:
+
+- AWS CLI v2 is installed.
+- AWS IAM Identity Center access is configured.
+- The developer has appropriate AWS permissions.
+- The AWS CLI profile points to the correct AWS account.
+- Commands are executed from the repository root unless otherwise specified.
+
+See [IAM Access Control](../docs/aws/iam-access-control.md) for identity and authentication configuration.
+
+The examples below use the local AWS CLI profile `recipe-app`. Each developer may use their own profile name.
+
+## 3. AWS Authentication
+
+Authenticate using IAM Identity Center:
 
 ```bash
 aws sso login --profile recipe-app
@@ -33,11 +60,41 @@ Verify the current AWS identity:
 aws sts get-caller-identity --profile recipe-app
 ```
 
-Confirm that the returned account is the intended project AWS account.
+Verify the configured Region:
 
-## 2. Inspect Existing VPCs
+```bash
+aws configure get region --profile recipe-app
+```
 
-Before provisioning network resources:
+Expected Region:
+
+```text
+us-east-1
+```
+
+AWS CLI SSO authentication uses temporary credentials rather than permanent IAM access keys.
+
+## 4. Network Infrastructure
+
+**Template:** `cloudformation/network.yaml`  
+**Stack:** `recipe-app-network`  
+**Deployment date:** October 13, 2026  
+**Status:** Deployed and verified
+
+### Network Configuration
+
+| Resource | Configuration |
+|---|---|
+| VPC | `10.0.0.0/16` |
+| Public subnet | `10.0.1.0/24` |
+| Internet Gateway | Attached to VPC |
+| Public route table | Configured |
+| Default route | `0.0.0.0/0` through Internet Gateway |
+| Subnet association | Public subnet associated with public route table |
+
+The project uses a dedicated VPC rather than modifying the account's default VPC.
+
+### 4.1 Inspect Existing VPCs
 
 ```bash
 aws ec2 describe-vpcs \
@@ -47,29 +104,9 @@ aws ec2 describe-vpcs \
   --output table
 ```
 
-Initial inspection found only the AWS default VPC:
+This command lists VPC IDs, CIDR blocks, and whether each VPC is the default.
 
-- VPC CIDR: `172.31.0.0/16`
-- Default VPC: `true`
-
-The project will use a separate CloudFormation-managed VPC.
-
-## 3. Network Infrastructure
-
-**Template:** `cloudformation/network.yaml`
-
-The initial network stack defines:
-
-- VPC: `10.0.0.0/16`
-- Public subnet: `10.0.1.0/24`
-- Internet Gateway
-- Public route table
-- Default internet route
-- Route table association
-
-### Validate the CloudFormation Template
-
-Run from the repository root:
+### 4.2 Validate the CloudFormation Template
 
 ```bash
 aws cloudformation validate-template \
@@ -87,21 +124,9 @@ Expected output:
 }
 ```
 
-**Validation status:** Passed on October 13, 2026.
+Validation checks whether AWS CloudFormation accepts the template's structure. It does not create resources or guarantee deployment success.
 
-Validation confirms that CloudFormation accepts the template's structure. It does not guarantee that resource creation will succeed.
-
-### Deploy the Network Stack
-
-### Deployment Status
-
-**Status:** Deployed successfully on October 13, 2026.
-
-**CloudFormation stack:** `recipe-app-network`
-
-**Region:** `us-east-1`
-
-**Deployment command:**
+### 4.3 Deploy the Network Stack
 
 ```bash
 aws cloudformation deploy \
@@ -111,9 +136,17 @@ aws cloudformation deploy \
   --profile recipe-app
 ```
 
-CloudFormation successfully created or updated the network stack. Resource-level verification is performed using the commands documented above.
+Successful deployment output:
 
-### Verify Stack Status
+```text
+Waiting for changeset to be created..
+Waiting for stack create/update to complete
+Successfully created/updated stack - recipe-app-network
+```
+
+The same command can be used to deploy subsequent template updates. Review proposed infrastructure changes before applying updates.
+
+### 4.4 Verify Stack Status
 
 ```bash
 aws cloudformation describe-stacks \
@@ -124,20 +157,37 @@ aws cloudformation describe-stacks \
   --output table
 ```
 
-Expected successful status:
+Verified result:
 
-`CREATE_COMPLETE`
+```text
+recipe-app-network
+CREATE_COMPLETE
+```
 
-### Inspect Stack Resources
+### 4.5 Verify Stack Resources
 
 ```bash
 aws cloudformation describe-stack-resources \
   --stack-name recipe-app-network \
   --region us-east-1 \
-  --profile recipe-app
+  --profile recipe-app \
+  --query 'StackResources[*].[LogicalResourceId,ResourceType,ResourceStatus]' \
+  --output table
 ```
 
-### Inspect Stack Outputs
+The deployment successfully created all seven CloudFormation resources:
+
+- `RecipeAppVPC`
+- `PublicSubnet`
+- `InternetGateway`
+- `InternetGatewayAttachment`
+- `PublicRouteTable`
+- `PublicDefaultRoute`
+- `PublicSubnetRouteTableAssociation`
+
+All resources were verified with status `CREATE_COMPLETE`.
+
+### 4.6 Inspect Stack Outputs
 
 ```bash
 aws cloudformation describe-stacks \
@@ -148,19 +198,39 @@ aws cloudformation describe-stacks \
   --output table
 ```
 
-The stack exports the VPC ID and public subnet ID for use by other CloudFormation templates.
+Verified deployment outputs:
 
-## 4. Infrastructure Updates
+| Output | Export Name | Value |
+|---|---|---|
+| VPC ID | `RecipeApp-VpcId` | `vpc-0197766fbe7061905` |
+| Public subnet ID | `RecipeApp-PublicSubnetId` | `subnet-0f0f85016b68912bc` |
 
-After changing the template, validate it again and run the same `aws cloudformation deploy` command.
+Other CloudFormation stacks can reference these resources through `Fn::ImportValue`.
 
-CloudFormation will create or update resources based on the template changes.
+These IDs represent the current deployment and may change if resources are recreated.
 
-Review changes carefully before applying them, especially if they could replace or delete existing resources.
+## 5. Infrastructure Updates
 
-## 5. Infrastructure Cleanup
+When modifying an existing CloudFormation template:
 
-To delete the network stack when it is no longer needed:
+1. Edit the relevant YAML file.
+2. Validate the updated template.
+3. Review the proposed changes.
+4. Deploy the updated stack.
+5. Verify stack status and resource health.
+6. Update the documentation if the architecture changes.
+
+For safer updates, use CloudFormation change sets to inspect proposed modifications before execution.
+
+Avoid making manual changes to CloudFormation-managed resources because they can cause configuration drift.
+
+## 6. Infrastructure Cleanup
+
+When the infrastructure is no longer needed, a CloudFormation stack can be deleted.
+
+**Warning:** Deleting stacks can remove infrastructure and associated data. Confirm dependencies and backups before running cleanup commands.
+
+Network stack deletion:
 
 ```bash
 aws cloudformation delete-stack \
@@ -169,21 +239,83 @@ aws cloudformation delete-stack \
   --profile recipe-app
 ```
 
-Only delete the network stack after dependent resources and stacks have been removed.
+Wait for deletion to complete:
 
-**Warning:** Deleting infrastructure can permanently remove resources and associated data. Do not run cleanup commands during active development without confirming dependencies.
+```bash
+aws cloudformation wait stack-delete-complete \
+  --stack-name recipe-app-network \
+  --region us-east-1 \
+  --profile recipe-app
+```
 
-## 6. Planned Infrastructure
+Dependent stacks, such as the future EC2 backend stack, must be removed before deleting the network stack.
 
-| Component | Planned Template | Status |
-|---|---|---|
-| VPC and networking | `network.yaml` | Deployed - verification pending |
-| EC2 backend | `backend.yaml` | Planned |
-| Relational database | `database.yaml` | Planned |
-| CI/CD pipeline | To be determined | Planned |
+Do not run cleanup commands against active project infrastructure without team approval.
 
-## 7. Architecture Documentation
+## 7. Planned Infrastructure
 
-A detailed network diagram will be added after the VPC is deployed and its resources are verified.
+### Backend Deployment
 
-The diagram will document the VPC CIDR, subnet boundaries, internet routing, EC2 placement, and relevant security controls.
+A future CloudFormation template will provision the Django backend on Amazon EC2.
+
+Planned components include:
+
+- EC2 instance
+- Security group
+- IAM instance role
+- AWS Systems Manager access
+- Docker-based Django deployment
+
+### Database
+
+Amazon RDS is planned for persistent relational storage.
+
+SQLite may be used temporarily during the initial cloud demonstration.
+
+### Frontend Hosting
+
+React frontend hosting is planned using Amazon S3 and CloudFront.
+
+### CI/CD
+
+AWS CodePipeline and CodeBuild are being considered for automated application builds and deployment.
+
+### Scalability
+
+Future improvements may include:
+
+- Multiple Availability Zones
+- Application Load Balancer
+- EC2 Auto Scaling
+- Private subnets
+- CloudWatch monitoring and alarms
+
+These components are not part of the initial network deployment.
+
+## 8. Architecture Documentation
+
+The AWS architecture will be documented separately, including a VPC network diagram showing:
+
+- VPC CIDR block
+- Public and future private subnets
+- Internet Gateway
+- Routing configuration
+- EC2 placement
+- Security boundaries
+- Future database connectivity
+
+See [AWS Architecture](../docs/aws-architecture.md) for the overall cloud design.
+
+The detailed network diagram will be added after the relevant resources have been deployed and verified.
+
+## 9. Security Notes
+
+- Use IAM Identity Center for developer authentication.
+- Avoid permanent IAM access keys.
+- Never commit credentials or authentication tokens.
+- Grant permissions according to development responsibilities.
+- Use dedicated IAM roles for AWS services.
+- Restrict network access through security groups.
+- Prefer AWS Systems Manager over publicly exposed SSH access.
+
+For additional information, see [IAM Access Control](../docs/aws/iam-access-control.md).
