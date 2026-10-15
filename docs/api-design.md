@@ -735,6 +735,80 @@ Additional filtering capabilities may be introduced as implementation progresses
 
 User-facing convenience filters such as cuisine or dietary filters should internally resolve to the corresponding standardized Tags.
 
+## 19.1 Recipe Search and Filtering Contract
+
+> **Status: Proposed (issue #13), pending team review.** The parameter parsing and default-merging rules below are implemented in `backend/apps/recipes/filters.py`. Applying them to Recipe queries depends on the Recipe models from issue #4.
+
+### Parameters
+
+| Parameter | Value | Repeatable | Meaning |
+| --- | --- | --- | --- |
+| `search` | Text, at most 255 characters | No | Case-insensitive match on the Recipe name. Leading and trailing whitespace is ignored. |
+| `tag` | Tag ID | Yes | Canonical Tag filter. Each Tag is grouped by its own type. |
+| `cuisine` | Tag name of type `CUISINE` | Yes | Convenience form of `tag`. The name is matched case-insensitively. |
+| `diet` | Tag name of type `DIET` | Yes | Convenience form of `tag`. |
+| `cost` | Tag name of type `COST` | Yes | Convenience form of `tag`. |
+| `other` | Tag name of type `OTHER` | Yes | Convenience form of `tag`. |
+| `allergen` | Allergen ID | Yes | Exclude Recipes containing this Allergen. |
+| `allergy` | Allergen name | Yes | Convenience form of `allergen`. The name is matched case-insensitively. |
+| `use_preferences` | `true` or `false`, default `true` | No | Whether saved Tag preferences apply (Registered Users only). Saved allergies always apply. |
+| `page`, `page_size` | Integers | No | Pagination, as in section 11. |
+
+Multiple values use **repeated parameters**, not comma-separated lists:
+
+```text
+GET /api/recipes/?cuisine=korean&cuisine=vietnamese
+```
+
+Each repeatable parameter accepts at most 20 values per request.
+
+### Combination semantics
+
+```text
+search  AND  (each Tag type's condition)  AND  NOT (any excluded Allergen)
+```
+
+Values within one Tag type are combined according to that type:
+
+| Tag type | Multiple values mean | Rationale |
+| --- | --- | --- |
+| `CUISINE` | **Any** (Korean OR Vietnamese) | A Recipe normally has one cuisine. ALL would usually return nothing. |
+| `COST` | **Any** (Cheap OR Moderate) | Cost levels are mutually exclusive. |
+| `DIET` | **All** (Vegan AND Halal) | Each selected diet is a requirement the Recipe must satisfy. |
+| `OTHER` | **All** (Quick AND High Protein) | Each selected characteristic narrows the results. |
+
+Allergen exclusions are a union: a Recipe is excluded if **any** of its Ingredients is linked to **any** excluded Allergen through the structured Recipe → RecipeIngredient → Ingredient → Allergen relationship.
+
+A Recipe appears at most once in the results, regardless of how many related rows match.
+
+### Registered User defaults
+
+Defaults come only from the authenticated requester's own profile. No parameter can select another user's data. Guests have no defaults.
+
+| Saved data | Explicit filter for the same category | Result |
+| --- | --- | --- |
+| Tag preferences of a type | None | Saved preferences of that type apply. |
+| Tag preferences of a type | Supplied (for example `cuisine=korean`) | The explicit value **replaces** the saved preferences of that type only. Other types keep their saved preferences. |
+| Tag preferences | `use_preferences=false` | No saved preferences apply. |
+| Allergies | None or supplied | Saved allergies **always** apply. Explicit `allergy`/`allergen` values **add** to them. Query parameters cannot remove a saved allergy; the user changes it through `PUT /api/users/me/allergies/`. |
+
+### Validation errors
+
+Invalid input returns `400 Bad Request` with field-specific messages, and no results are returned:
+
+- A `tag` or `allergen` that is not a positive integer or does not exist.
+- A `cuisine`, `diet`, `cost`, `other` or `allergy` name that does not match a supported value of that type. Unknown allergy names are rejected rather than ignored, so a typo cannot silently disable a safety filter.
+- A `search` longer than 255 characters, a blank value, more than 20 values for one parameter, or a `use_preferences` value other than `true`/`false`.
+
+Unrecognized parameter names are ignored.
+
+### Open questions for the team
+
+1. `?tag_type=CUISINE` is listed above but its meaning is undefined (for example, "Recipes that have any CUISINE Tag"). Is it still needed? It is not implemented yet.
+2. Should saved Tag preferences apply by default (as proposed), or only when the frontend opts in?
+3. Which Recipe fields does `search` cover: name only (as proposed), or also description?
+4. Default ordering: name, then ID (proposed, matching the Ingredient API).
+
 ---
 
 ## GET `/api/recipes/{id}/`
