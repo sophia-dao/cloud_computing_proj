@@ -10,3 +10,4 @@ class IngredientAdmin(admin.ModelAdmin):
     search_fields = ("name",)
     list_filter = ("category",)
     ordering = ("name",)
+    filter_horizontal = ("allergens",)

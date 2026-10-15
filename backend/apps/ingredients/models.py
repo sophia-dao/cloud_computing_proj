@@ -10,6 +10,14 @@ class Ingredient(models.Model):
         blank=True,
         default="",
     )
+    # docs/database-design.md section 13: Ingredient * --- * Allergen.
+    # The authoritative source for recipe allergen filtering
+    # (Recipe -> RecipeIngredient -> Ingredient -> Allergen).
+    allergens = models.ManyToManyField(
+        "users.Allergen",
+        related_name="ingredients",
+        blank=True,
+    )
 
     class Meta:
         ordering = ["name", "id"]
