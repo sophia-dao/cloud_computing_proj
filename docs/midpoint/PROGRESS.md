@@ -291,12 +291,3 @@ The project has progressed from an initial proposal to a structured React/Django
 
 The application is **not yet feature-complete or production-ready**. Recipe recommendation workflows, Cognito integration, origin HTTPS, managed persistence, automated deployment, and measured scalability remain priorities for the November 13 final submission.
 
----
-
-### Final review checklist — remove before submission
-
-- [ ] Confirm which teammate features have been merged into `main` and update the application feature table if necessary.
-- [ ] Run the latest Django tests and record the exact test count and command output.
-- [ ] Capture screenshots of CloudFront frontend, successful API JSON, API 404 JSON, and relevant CloudFormation resources.
-- [ ] Confirm deployed URLs and the current AWS infrastructure diagram match the demo environment.
-- [ ] Rehearse one repeatable live demonstration and ensure no unverified functionality is presented as complete.
