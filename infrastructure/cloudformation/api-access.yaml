@@ -1,0 +1,45 @@
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Recipe Suggestion App - Temporary inbound access to the Django API port on the
+  backend EC2 instance. Kept separate from backend.yaml so opening or closing
+  API access never updates (or replaces) the EC2 instance. Delete this stack to
+  close the port again.
+
+Parameters:
+  BackendSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: SecurityGroupId output of the recipe-app-backend stack
+
+  AllowedCidr:
+    Type: String
+    AllowedPattern: ^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$
+    ConstraintDescription: Must be an IPv4 CIDR, e.g. 203.0.113.10/32
+    Description: >-
+      Who may reach the API. Use your own public IP with /32 for the demo;
+      0.0.0.0/0 exposes the unauthenticated API to the whole internet.
+
+  ApiPort:
+    Type: Number
+    Default: 8000
+    Description: Host port the Django container is published on
+
+Resources:
+  ApiIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref BackendSecurityGroupId
+      IpProtocol: tcp
+      FromPort: !Ref ApiPort
+      ToPort: !Ref ApiPort
+      CidrIp: !Ref AllowedCidr
+      Description: Recipe App Django API (midpoint demo access)
+
+Outputs:
+  AllowedCidr:
+    Description: CIDR currently allowed to reach the API
+    Value: !Ref AllowedCidr
+
+  ApiPort:
+    Description: Open API port
+    Value: !Ref ApiPort

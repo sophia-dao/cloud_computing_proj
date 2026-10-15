@@ -322,25 +322,15 @@ To address the course's scalability requirement, the final evaluation should inc
 ## 7. Remaining work and risks
 
 | Remaining task | Main risk | Proposed next action |
-
 | --- | --- | --- |
-
 | Integrate frontend and Django APIs | Inconsistent API contracts or unfinished UI flows | Verify one complete user journey and fix integration issues |
-
 | Complete recipes, inventory, and recommendation flows | Shared data/model dependencies | Prioritize an end-to-end available-ingredients recommendation |
-
 | Integrate and verify Cognito authentication | Authorization and profile mapping complexity | Test login, protected endpoints, and role behavior |
-
 | Run Django container on EC2 | Runtime configuration, migrations, service health | Deploy an image, apply migrations, and run a local-on-instance health check |
-
 | Implement persistent cloud storage | SQLite data loss or deployment coupling | Add and test an appropriate persistent database strategy |
-
 | Deploy React frontend | Hosting, routing, CORS, and HTTPS | Configure hosting and test API connectivity |
-
 | Complete GitHub Actions CI/CD | IAM permissions, safe secret handling, failed rollouts | Finish OIDC verification and implement tested build/push/deploy stages |
-
 | Measure scalability and security | Insufficient evidence for professor's criteria | Run load tests and document protections and limitations |
-
 | Record final demo and update documentation | Schedule and integration delays | Freeze demo scope and verify a repeatable demonstration |
 
 ## 8. Plan through final submission

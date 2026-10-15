@@ -98,7 +98,9 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        # On EC2 this points at a host-mounted volume so data survives
+        # container replacement. SQLite is temporary until RDS is provisioned.
+        'NAME': os.environ.get("DJANGO_SQLITE_PATH", BASE_DIR / 'db.sqlite3'),
     }
 }
 

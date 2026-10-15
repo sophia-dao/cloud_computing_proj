@@ -1,0 +1,26 @@
+# AWS CodeBuild build specification for the Django backend test stage.
+#
+# Status at midpoint: the buildspec is in the repository and the same commands
+# pass locally, but the CodeBuild project / CodePipeline connection to GitHub is
+# NOT yet created. See docs/midpoint/README.md, "CI/CD".
+
+version: 0.2
+
+env:
+  variables:
+    # Test-only placeholder; production keys live on the EC2 host, never here.
+    DJANGO_SECRET_KEY: codebuild-test-only-not-a-secret
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.13
+    commands:
+      - (cd backend && pip install -r requirements.txt)
+
+  build:
+    commands:
+      - (cd backend && python manage.py check)
+      - (cd backend && python manage.py makemigrations --check --dry-run)
+      - (cd backend && python manage.py test --verbosity 2)

@@ -21,11 +21,16 @@ Infrastructure as Code (IaC) for the **Recipe Suggestion App**, managed with AWS
 ```text
 infrastructure/
 ├── README.md
-└── cloudformation/
-    ├── network.yaml
-    ├── ecr.yaml
-    └── backend.yaml
+├── cloudformation/
+│   ├── network.yaml
+│   ├── ecr.yaml
+│   ├── backend.yaml
+│   └── api-access.yaml     # optional: opens the API port to one CIDR
+└── scripts/
+    └── deploy-backend.sh   # runs the ECR image on EC2 via SSM Run Command
 ```
+
+> **Running Django on EC2:** see the step-by-step runbook in [docs/midpoint/README.md §3](../docs/midpoint/README.md#3-deployment-runbook-reproducible). `api-access.yaml` is a separate stack so the API port can be opened and closed without updating `backend.yaml`. Updating that stack could replace the instance if the latest-AMI parameter has changed.
 
 ### Network configuration
 
