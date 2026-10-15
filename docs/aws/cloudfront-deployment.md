@@ -1,116 +1,91 @@
 # AWS CloudFront Deployment and Troubleshooting
 
 **Project:** Recipe Suggestion App  
-**Environment:** AWS — us-east-1  
+**AWS Region:** `us-east-1`  
 **Deployment method:** AWS CloudFormation  
-**Status:** Deployed and verified  
-**Last updated:** October 14, 2026
+**Last updated:** October 15, 2026  
+**Status:** CloudFront frontend hosting, API routing, and SPA error handling deployed and verified
 
 ## 1. Overview
 
-The Recipe Suggestion App uses Amazon CloudFront as the public entry point for both the React frontend and Django REST API.
+The Recipe Suggestion App uses Amazon CloudFront as the public HTTPS entry point for its React frontend and Django REST Framework API. The React build is hosted in a private Amazon S3 bucket, while Django runs in a Docker container on an Amazon EC2 instance behind Nginx.
 
-The frontend is stored in a private Amazon S3 bucket, while the Django backend runs inside a Docker container on an Amazon EC2 instance.
+CloudFront uses two origins: the S3 origin for the React application and an EC2 custom origin for requests matching `/api/*`. A CloudFront Function rewrites React client-side routes to `/index.html` without changing API error responses. The public frontend and API therefore share one domain.
 
-CloudFront serves the React application over HTTPS and forwards requests matching `/api/*` to the backend through an Nginx reverse proxy.
+### 1.1 Deployed resources
 
-This configuration provides a single public domain for the application and eliminates the need for the frontend to call a separate backend domain.
-
-### Deployed resources
-
-| Resource | Configuration |
+| Resource | Value |
 |---|---|
-| AWS Region | us-east-1 |
-| CloudFormation frontend stack | `recipe-app-frontend` |
-| CloudFront distribution | `E2YMECNRA0V5YR` |
-| CloudFront URL | `https://d1q0iv2raorz8j.cloudfront.net` |
-| S3 frontend bucket | `recipe-app-frontend-frontendbucket-yhbrd6afosjk` |
+| Frontend CloudFormation stack | `recipe-app-frontend` |
+| CloudFront distribution ID | `E2YMECNRA0V5YR` |
+| Public domain | `https://d1q0iv2raorz8j.cloudfront.net` |
+| Private frontend S3 bucket | `recipe-app-frontend-frontendbucket-yhbrd6afosjk` |
 | Backend EC2 instance | `i-0f80e33afb9d7dd0a` |
 | Backend Elastic IP | `3.214.51.24` |
 | Backend origin DNS | `ec2-3-214-51-24.compute-1.amazonaws.com` |
-| Backend application | Django REST Framework |
-| Backend container | Docker |
-| Reverse proxy | Nginx |
+| CloudFront origin-facing prefix list | `pl-3b927c52` |
 | Infrastructure template | `infrastructure/cloudformation/frontend.yaml` |
+| Backend software | Nginx, Docker, Django REST Framework, SQLite |
 
-## 2. Deployment Architecture
-
-The request flow is:
+## 2. Architecture and request routing
 
 ```text
-                    Internet
-                       |
-                       v
-               Amazon CloudFront
-                 HTTPS endpoint
-                       |
-              +--------+---------+
-              |                  |
-              v                  v
-       Default behavior      /api/* behavior
-              |                  |
-              v                  v
-         Amazon S3          EC2 public origin
-       Private bucket       HTTP port 80
-              |                  |
-              v                  v
-        React frontend         Nginx
-                                 |
-                                 v
-                           127.0.0.1:8000
-                                 |
-                                 v
-                           Docker container
-                                 |
-                                 v
-                           Django REST API
-                                 |
-                                 v
-                         SQLite database
+                         Browser
+                            |
+                          HTTPS
+                            |
+                     Amazon CloudFront
+                            |
+              +-------------+-------------+
+              |                           |
+      Default cache behavior       /api/* cache behavior
+              |                           |
+    CloudFront Function                  EC2 origin
+    SPA route rewrite                  HTTP port 80
+              |                           |
+       Private S3 bucket                 Nginx
+              |                           |
+         React build               127.0.0.1:8000
+                                          |
+                                   Docker / Django
+                                          |
+                                       SQLite
 ```
 
-CloudFront selects the origin based on the request path.
+- `/`, `/dashboard`, `/profile`, and other extensionless frontend routes are handled by the default S3 behavior. The CloudFront Function rewrites these paths to `/index.html`.
+- JavaScript, CSS, and other file paths are served from S3 without the SPA rewrite.
+- `/api/*` requests are routed to EC2, where Nginx forwards them to Django.
+- Viewer-to-CloudFront connections use HTTPS; **CloudFront-to-EC2 connections currently use unencrypted HTTP**.
 
-- Requests for `/`, JavaScript, CSS, and other frontend assets are sent to S3.
-- Requests matching `/api/*` are sent to the EC2 backend.
-- CloudFront accepts HTTPS requests from users.
-- The CloudFront-to-EC2 connection currently uses HTTP and requires further security improvements.
+The successful API tests establish that the deployed domain reaches Django. They do not, by themselves, prove that a React component invokes the API; that requires a separate browser Network-tab or UI integration test.
 
-## 3. Initial Frontend Hosting Configuration
+## 3. Initial frontend hosting
 
-Before adding backend routing, the frontend was already deployed using Amazon S3 and CloudFront.
+The initial CloudFormation frontend stack created a private S3 bucket and a CloudFront distribution. S3 Block Public Access was enabled, and objects use SSE-S3 encryption.
 
-### 3.1 Private S3 bucket
+CloudFront Origin Access Control (OAC) grants the distribution access to S3 without making the bucket public. The S3 bucket policy restricts reads to the specific CloudFront distribution ARN.
 
-The S3 bucket stores the production build of the React application.
+Initially, React client-side routes were supported with distribution-wide custom error responses:
 
-Public access is blocked, and the bucket uses server-side encryption with Amazon S3-managed keys (SSE-S3).
+```yaml
+CustomErrorResponses:
+  - ErrorCode: 403
+    ResponseCode: 200
+    ResponsePagePath: /index.html
+    ErrorCachingMinTTL: 0
+  - ErrorCode: 404
+    ResponseCode: 200
+    ResponsePagePath: /index.html
+    ErrorCachingMinTTL: 0
+```
 
-### 3.2 CloudFront Origin Access Control
+This worked for missing S3 paths representing React routes but later caused incorrect API error responses. **These mappings have since been removed**, as documented in Section 7.
 
-CloudFront uses Origin Access Control (OAC) to access the private S3 bucket.
+## 4. Adding Django as a CloudFront origin
 
-The bucket policy grants read access to the CloudFront service principal, restricted to the specific distribution ARN.
+### 4.1 EC2 origin and API behavior
 
-This allows users to access frontend files through CloudFront without exposing the S3 bucket publicly.
-
-### 3.3 Single-page application routing
-
-The initial distribution used custom error responses to serve `/index.html` when S3 returned HTTP 403 or 404.
-
-This supports client-side React routes such as `/profile` or `/dashboard`.
-
-However, these error responses are configured at the distribution level and can also affect backend API responses.
-
-This limitation remains unresolved and is documented in Section 9.
-
-## 4. Adding Django API Routing to CloudFront
-
-To connect the frontend and backend under one domain, we updated the existing CloudFront distribution through CloudFormation.
-
-### 4.1 New backend origin
-
-A second origin was added to the distribution.
+We added a second origin to `frontend.yaml`:
 
 ```yaml
 - Id: DjangoAPIOrigin
@@ -121,47 +96,25 @@ A second origin was added to the distribution.
     OriginReadTimeout: 30
 ```
 
-The backend uses an EC2 Elastic IP to maintain a stable public address.
-
-The origin DNS name points to that Elastic IP.
-
-### 4.2 API cache behavior
-
-A new cache behavior was created for `/api/*`.
+The backend Elastic IP provides a stable public address for the origin DNS name. We also added an ordered cache behavior for `/api/*`:
 
 ```yaml
 CacheBehaviors:
   - PathPattern: /api/*
     TargetOriginId: DjangoAPIOrigin
     ViewerProtocolPolicy: redirect-to-https
-    AllowedMethods:
-      - GET
-      - HEAD
-      - OPTIONS
-      - PUT
-      - PATCH
-      - POST
-      - DELETE
-    CachedMethods:
-      - GET
-      - HEAD
+    AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+    CachedMethods: [GET, HEAD]
     Compress: true
     CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
     OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
 ```
 
-The selected AWS-managed policies are:
+The cache policy is AWS-managed **CachingDisabled**. The origin request policy is AWS-managed **AllViewerExceptHostHeader**, which sends the origin hostname as the `Host` header. The behavior allows API methods beyond GET, although only the Ingredients GET endpoint was verified during this deployment.
 
-| Policy | Purpose |
-|---|---|
-| `Managed-CachingDisabled` | Prevents CloudFront from caching API responses |
-| `Managed-AllViewerExceptHostHeader` | Forwards viewer request information while using the origin hostname as the Host header |
+### 4.2 Origin header and EC2 network restrictions
 
-Disabling caching simplifies API behavior during development and avoids serving stale or user-specific responses from CloudFront's cache.
-
-### 4.3 Private origin header
-
-A custom header was configured between CloudFront and Nginx.
+We introduced a CloudFormation parameter for a shared private origin header:
 
 ```yaml
 Parameters:
@@ -172,7 +125,7 @@ Parameters:
     Description: Private header value shared by CloudFront and Nginx
 ```
 
-CloudFront includes the header in origin requests:
+The CloudFront custom origin includes:
 
 ```yaml
 OriginCustomHeaders:
@@ -180,33 +133,13 @@ OriginCustomHeaders:
     HeaderValue: !Ref BackendOriginKey
 ```
 
-Nginx checks the header before forwarding API requests.
+The real header value was supplied using a private temporary parameters file, never committed to Git. The `NoEcho` property masks the parameter in certain CloudFormation displays but does not make the HTTP origin connection encrypted or constitute a full secrets-management solution.
 
-The actual token is not stored in the Git repository or included in this documentation.
+The EC2 security group permits inbound TCP port 80 from the AWS-managed CloudFront origin-facing prefix list `pl-3b927c52`, rather than from the entire internet. This prefix list covers CloudFront origin-facing infrastructure generally, not only our distribution. Nginx checks the private header before proxying API traffic.
 
-**Security limitation:** The origin currently uses HTTP, so this header is transmitted without transport encryption between CloudFront and EC2. It is an additional access check, not a substitute for HTTPS or application authentication.
+### 4.3 Nginx and Docker
 
-## 5. EC2 and Nginx Configuration
-
-### 5.1 Security group restrictions
-
-The EC2 backend security group was updated to allow inbound TCP port 80 only from the AWS-managed CloudFront origin-facing prefix list.
-
-Prefix list:
-
-`pl-3b927c52`
-
-This reduces exposure compared with opening HTTP access to all IPv4 addresses.
-
-However, the prefix list is shared by CloudFront distributions and does not uniquely identify our distribution.
-
-The custom origin header provides an additional access restriction.
-
-### 5.2 Nginx reverse proxy
-
-Nginx was installed on the EC2 instance and configured to forward API requests to Django.
-
-The relevant configuration is:
+The relevant Nginx configuration is:
 
 ```nginx
 server {
@@ -230,32 +163,15 @@ server {
 }
 ```
 
-The placeholder represents the existing private token and must not be used as an actual production value.
+`PRIVATE_SECRET_TOKEN` is a documentation placeholder, not the deployed value. Nginx configuration validation passed with `sudo nginx -t`, and the service was enabled. The Docker container publishes Django only on the EC2 loopback interface (`127.0.0.1:8000:8000`), preventing direct access to the Django port from outside EC2.
 
-Nginx was validated using:
+**Security caveat:** The current HTTP origin hop can expose transmitted data and the origin header to interception. Do not use this configuration for login credentials, authentication tokens, or personal information. End-to-end TLS and application authentication remain required improvements.
 
-```bash
-sudo nginx -t
-sudo systemctl enable --now nginx
-```
+## 5. Initial CloudFormation deployment and troubleshooting
 
-### 5.3 Docker networking
+### 5.1 Template validation and change sets
 
-Django is exposed only on the EC2 loopback interface:
-
-```text
-127.0.0.1:8000:8000
-```
-
-This prevents direct public access to the container's application port.
-
-External API traffic must pass through Nginx.
-
-## 6. CloudFormation Deployment Procedure
-
-The CloudFront changes were managed using the existing frontend CloudFormation stack.
-
-### 6.1 Validate the template
+We validated the template:
 
 ```bash
 aws cloudformation validate-template \
@@ -264,9 +180,7 @@ aws cloudformation validate-template \
   --profile recipe-app
 ```
 
-### 6.2 Create a change set
-
-A private temporary JSON parameter file was used to supply the backend origin token.
+For the initial API-origin update, we created a change set using a private temporary JSON file containing `BackendOriginKey`:
 
 ```bash
 aws cloudformation create-change-set \
@@ -279,69 +193,32 @@ aws cloudformation create-change-set \
   --profile recipe-app
 ```
 
-The parameter file was stored outside the repository and removed after successful change set creation.
+The file was kept outside the repository with restrictive permissions and deleted after change set creation. The proposed change was `FrontendDistribution: Modify, Replacement: False`; neither the existing distribution nor S3 bucket was scheduled for replacement.
 
-### 6.3 Inspect infrastructure changes
+### 5.2 Failure: CloudFront cache policy did not exist
 
-Before execution, the proposed changes were inspected.
-
-The change set showed:
-
-| Resource | Action | Replacement |
-|---|---|---|
-| `FrontendDistribution` | Modify | False |
-
-This confirmed that the existing CloudFront distribution would be modified rather than replaced.
-
-No replacement of the S3 frontend bucket was proposed.
-
-### 6.4 Execute the change set
-
-```bash
-aws cloudformation execute-change-set \
-  --stack-name recipe-app-frontend \
-  --change-set-name add-django-api-origin-v2 \
-  --region us-east-1 \
-  --profile recipe-app
-```
-
-The corrected update was subsequently verified through a successful API request.
-
-## 7. Deployment Errors and Troubleshooting
-
-Several issues occurred during the deployment process. These were useful for understanding CloudFormation rollback behavior, AWS-managed CloudFront policies, and Django host validation.
-
-### 7.1 Error: Invalid CloudFront cache policy
-
-**Error message:**
+**Observed error:**
 
 ```text
-Invalid request provided:
-The specified cache policy does not exist.
+Invalid request provided: The specified cache policy does not exist.
 (Service: CloudFront, Status Code: 404)
 ```
 
-**Cause:**
-
-The initial CloudFormation template contained an incorrect AWS-managed cache policy ID:
+**Cause:** The original template used an incorrect managed cache policy ID:
 
 ```text
 413f1600-6a40-4f8f-9b13-86fa04c8f3e0
 ```
 
-CloudFormation template validation did not catch the invalid ID because template validation does not guarantee that referenced external service resources exist.
+Template validation had passed, but CloudFormation could not update the distribution with a nonexistent policy. The stack update failed and rolled back.
 
-The error occurred when CloudFormation attempted to update the CloudFront distribution.
-
-**Resolution:**
-
-We replaced the invalid ID with the correct AWS-managed `CachingDisabled` policy ID:
+**Fix:** Replace the ID with the correct `Managed-CachingDisabled` policy:
 
 ```text
 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
 ```
 
-We verified that the policy existed:
+We verified the ID directly:
 
 ```bash
 aws cloudfront get-cache-policy \
@@ -351,131 +228,63 @@ aws cloudfront get-cache-policy \
   --output text
 ```
 
-Result:
+Output: `Managed-CachingDisabled`.
 
-```text
-Managed-CachingDisabled
-```
+**Lesson:** `validate-template` checks template structure but does not guarantee that every referenced AWS resource or policy exists.
 
-**Lesson learned:**
+### 5.3 Failure: Parameter unavailable after rollback
 
-CloudFormation template validation is necessary but insufficient. Service-specific identifiers should be verified before deploying.
-
-### 7.2 Error: Cannot reuse a parameter from a rolled-back update
-
-**Error message:**
+**Observed error:**
 
 ```text
 Invalid input for parameter key BackendOriginKey.
-Cannot specify usePreviousValue as true for a parameter
-key not in the previous template.
+Cannot specify usePreviousValue as true for a parameter key
+not in the previous template.
 ```
 
-**Cause:**
+**Cause:** `BackendOriginKey` had been introduced in the failed update. Following rollback, the previously deployed stack template did not contain that parameter, so `UsePreviousValue=true` was invalid.
 
-The first CloudFront update failed and rolled back.
+**Fix:** Recreate the change set with the original header token supplied through a private parameters file. Once that update succeeded, the parameter became part of the deployed stack and could be reused in later updates.
 
-Because `BackendOriginKey` was introduced in the failed update, it was not part of the previously deployed stack template.
+**Lesson:** A newly introduced parameter from a rolled-back update cannot necessarily be reused as a previous stack parameter.
 
-A subsequent attempt to create a change set using:
+### 5.4 Failure: Django returned HTTP 400
 
-```text
-ParameterKey=BackendOriginKey,UsePreviousValue=true
-```
+After CloudFront successfully routed requests to EC2, the first API test returned:
 
-failed.
-
-**Resolution:**
-
-We supplied the original token again through a temporary parameter file.
-
-The file was protected using restrictive permissions and kept outside Git.
-
-**Lesson learned:**
-
-A parameter introduced by a failed update may not be available for reuse after rollback. Parameters must be supplied explicitly when they are not part of the currently deployed stack.
-
-### 7.3 Error: HTTP 400 Bad Request from Django
-
-After the corrected CloudFront deployment, we tested:
-
-```bash
-curl -i https://d1q0iv2raorz8j.cloudfront.net/api/ingredients/
-```
-
-The response was:
-
-```text
+```http
 HTTP/1.1 400 Bad Request
 Server: nginx/1.30.5
-X-Cache: Error from cloudfront
+Content-Type: text/html; charset=utf-8
 ```
 
-The response body contained Django's `Bad Request (400)` HTML page.
-
-**Cause:**
-
-The request successfully reached the EC2 instance and passed through Nginx, but Django rejected the forwarded hostname.
-
-The backend initially allowed only:
+**Cause:** Django's environment initially contained:
 
 ```env
 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
 ```
 
-CloudFront used the EC2 origin hostname when forwarding the request, which was not included in Django's allowed hosts.
+The CloudFront origin request used the EC2 origin hostname in the HTTP `Host` header. Nginx forwarded that hostname to Django, where it failed `ALLOWED_HOSTS` validation.
 
-**Resolution:**
-
-We updated the backend environment file:
+**Fix:** Update `/opt/recipe-app/backend.env` to include the EC2 origin hostname:
 
 ```env
 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,ec2-3-214-51-24.compute-1.amazonaws.com
 ```
 
-We then recreated the Docker container using the updated environment file.
+The Docker container was recreated using the same image, port mapping, environment file, and persistent SQLite bind mount. A simple `docker restart` would not have reloaded the changed environment file.
 
-A simple Docker restart would not have loaded the new environment variables.
+**Lesson:** Verify the forwarded `Host` header when deploying Django behind CloudFront and Nginx; recreate containers when changing Docker-supplied environment variables.
 
-**Lesson learned:**
+### 5.5 Initial successful API test
 
-When deploying Django behind a reverse proxy or CDN, `ALLOWED_HOSTS` must include the hostname Django receives in the HTTP Host header.
+After the fixes, the public endpoint worked:
 
-Updating a Docker environment file also requires recreating the container for the new variables to take effect.
-
-### 7.4 Challenge: Preserving existing infrastructure
-
-The frontend was already deployed and functional before API routing was added.
-
-Replacing the CloudFront distribution or S3 bucket would have introduced unnecessary disruption.
-
-To avoid this, we used CloudFormation change sets and checked the `Replacement` field before applying updates.
-
-The final proposed change modified only the existing CloudFront distribution without replacement.
-
-**Lesson learned:**
-
-For infrastructure that is already running, review CloudFormation change sets before execution rather than relying solely on template validation.
-
-## 8. Final Deployment Verification
-
-After correcting the cache policy, supplying the parameter, and updating Django's allowed hosts, we tested the public API endpoint:
-
-```text
-https://d1q0iv2raorz8j.cloudfront.net/api/ingredients/
+```bash
+curl -i 'https://d1q0iv2raorz8j.cloudfront.net/api/ingredients/'
 ```
 
-The Django REST Framework browsable API loaded successfully.
-
-The API returned:
-
-```text
-HTTP 200 OK
-Allow: GET, HEAD, OPTIONS
-Content-Type: application/json
-```
-
-Response:
+The Django REST Framework response returned HTTP 200 with a paginated JSON object:
 
 ```json
 {
@@ -486,85 +295,170 @@ Response:
 }
 ```
 
-This confirms that:
+The empty list was expected because the deployed SQLite database did not yet contain ingredient records.
 
-1. The public CloudFront endpoint is reachable over HTTPS.
-2. The `/api/*` cache behavior routes requests to the EC2 origin.
-3. The request reaches Nginx.
-4. Nginx forwards the request to Django.
-5. Django accepts the forwarded hostname.
-6. Django REST Framework returns the expected JSON structure.
+## 6. Discovered problem: API errors were replaced with React HTML
 
-The empty ingredient list is expected because the deployed database does not currently contain ingredient records.
+Although the valid Ingredients endpoint worked, a request for a nonexistent ingredient exposed a routing problem:
 
-This test verifies API accessibility through the deployed frontend domain. Testing the ingredient search feature inside the React interface is a separate frontend integration check.
+```bash
+curl -i 'https://d1q0iv2raorz8j.cloudfront.net/api/ingredients/999999/'
+```
 
-## 9. Remaining Issues and Limitations
+**Incorrect response before the fix:**
 
-### 9.1 CloudFront SPA error handling
+```http
+HTTP/1.1 200 OK
+Content-Type: text/html
+Content-Length: 458
+```
 
-The current CloudFront distribution uses custom error responses that convert HTTP 403 and 404 responses to HTTP 200 and serve `/index.html`.
+The distribution-wide `CustomErrorResponses` rules were converting the backend's HTTP 404 into HTTP 200 and serving the React `index.html` file. This could mislead API clients, break JSON parsing, and hide genuine backend errors.
 
-Although this supports React client-side routing, it can also interfere with API error responses.
+We needed to preserve React client-side navigation while allowing Django to return its own HTTP status codes and JSON errors.
 
-For example, an API endpoint that legitimately returns HTTP 404 may be presented as an HTTP 200 response containing the React HTML page.
+## 7. Fix: CloudFront Function for SPA routing
 
-**Planned improvement:**
+### 7.1 New CloudFront Function
 
-Separate SPA routing behavior from API error handling, potentially using a CloudFront Function for frontend route rewriting and removing the distribution-wide custom error mappings.
+We added the following resource to `frontend.yaml` under `Resources`:
 
-### 9.2 Unencrypted backend origin connection
+```yaml
+FrontendSpaRewriteFunction:
+  Type: AWS::CloudFront::Function
+  Properties:
+    Name: !Sub '${AWS::StackName}-spa-rewrite'
+    AutoPublish: true
+    FunctionConfig:
+      Comment: Rewrite React SPA routes to index.html
+      Runtime: cloudfront-js-1.0
+    FunctionCode: |
+      function handler(event) {
+        var request = event.request;
+        var uri = request.uri;
 
-The current connection between CloudFront and EC2 uses HTTP on port 80.
+        // Leave API requests unchanged.
+        if (uri === '/api' || uri.indexOf('/api/') === 0) {
+          return request;
+        }
 
-Although the public CloudFront endpoint uses HTTPS, the origin connection is not encrypted.
+        // Leave static files unchanged.
+        if (uri.indexOf('.') !== -1) {
+          return request;
+        }
 
-**Planned improvement:**
+        // Rewrite React routes to index.html.
+        request.uri = '/index.html';
+        return request;
+      }
+```
 
-Configure HTTPS between CloudFront and the backend origin with a valid TLS certificate and update the CloudFront origin protocol policy.
+The function is associated with the **default S3 cache behavior only**, not the `/api/*` behavior:
 
-Until then, testing should be restricted to non-sensitive endpoints without credentials or personal information.
+```yaml
+FunctionAssociations:
+  - EventType: viewer-request
+    FunctionARN: !GetAtt FrontendSpaRewriteFunction.FunctionARN
+```
 
-### 9.3 Authentication
+We removed the distribution-wide `CustomErrorResponses` mappings. The CloudFront Function now handles SPA navigation, while the backend returns its own errors.
 
-Amazon Cognito authentication is planned but has not yet been implemented or verified in the deployed environment.
+**Routing details:** The default behavior rewrites extensionless frontend paths such as `/dashboard` and `/profile` to `/index.html`. File paths containing a period, such as `/assets/nonexistent.js`, remain unchanged. Requests matching `/api/*` use their separate behavior and do not execute this function. The function's `/api` check also leaves that path unchanged if it reaches the default behavior.
 
-Authenticated API requests should not be enabled through the current HTTP origin connection.
+### 7.2 Deploying the SPA fix
 
-### 9.4 Database
+We validated the updated template, then created a second change set:
 
-The deployed backend currently uses SQLite for development and midpoint demonstration.
+```bash
+aws cloudformation create-change-set \
+  --stack-name recipe-app-frontend \
+  --change-set-name fix-spa-api-error-handling \
+  --change-set-type UPDATE \
+  --template-body file://infrastructure/cloudformation/frontend.yaml \
+  --parameters ParameterKey=BackendOriginKey,UsePreviousValue=true \
+  --region us-east-1 \
+  --profile recipe-app
+```
 
-A managed database such as Amazon RDS is a possible future improvement for durability, availability, and scalability.
+This time `UsePreviousValue=true` worked because `BackendOriginKey` was already part of the successfully deployed stack.
 
-### 9.5 Automated deployment
+The change set showed:
 
-Infrastructure is managed using CloudFormation, but automatic application deployment through GitHub Actions and AWS OIDC is not yet fully implemented.
+| Action | Logical resource | Replacement |
+|---|---|---|
+| Modify | `FrontendDistribution` | False |
+| Add | `FrontendSpaRewriteFunction` | None |
 
-### 9.6 Infrastructure configuration consistency
+We executed the change set, then tested API responses, SPA routes, and missing static assets. The existing CloudFront distribution and S3 bucket were preserved.
 
-The EC2 Elastic IP was allocated and associated separately from the current CloudFormation backend stack.
+## 8. Final verification
 
-For future maintenance, the Elastic IP association should be brought under infrastructure-as-code management to reduce configuration drift.
+All four post-fix tests passed against the deployed CloudFront domain.
 
-## 10. Summary
+| Test | Command / path | Observed result | Status |
+|---|---|---|---|
+| Missing ingredient | `/api/ingredients/999999/` | HTTP 404, JSON error | Passed |
+| Valid ingredients list | `/api/ingredients/?format=json` | HTTP 200, JSON | Passed |
+| React client-side route | `/dashboard` | HTTP 200, HTML | Passed |
+| Missing static asset | `/assets/nonexistent.js` | HTTP 403 or 404, not 200 | Passed |
 
-The CloudFront integration was successfully completed after resolving several deployment issues.
+The missing-ingredient response after the fix was:
 
-The final architecture serves the React frontend from a private S3 bucket and forwards API requests to Django running in Docker on EC2.
+```http
+HTTP/1.1 404 Not Found
+Content-Type: application/json
+Server: nginx/1.30.5
+```
 
-The deployment demonstrated practical experience with:
+```json
+{
+  "detail": "No Ingredient matches the given query."
+}
+```
 
-- Amazon CloudFront distributions, origins, and cache behaviors
-- S3 private hosting and Origin Access Control
-- CloudFormation template validation, change sets, and rollback
-- AWS-managed CloudFront policies
-- EC2 security groups and CloudFront managed prefix lists
-- Nginx reverse proxy configuration
-- Docker container networking and environment configuration
-- Django REST Framework deployment and host validation
-- Troubleshooting end-to-end HTTP requests
+This verifies that CloudFront no longer replaces Django API errors with React HTML. It also confirms that the React route rewrite still works and missing JavaScript files are not disguised as successful HTML responses.
 
-**Final result:** The deployed `/api/ingredients/` endpoint returned HTTP 200 and the expected JSON response through the public CloudFront HTTPS domain.
+### 8.1 Local shell issue during testing
 
-The integration meets the initial midpoint deployment objective, while authentication, end-to-end encryption, API error handling, and production scalability remain future work.
+A query-string test initially failed in the local zsh shell:
+
+```text
+zsh: no matches found: https://d1q0iv2raorz8j.cloudfront.net/api/ingredients/?format=json
+```
+
+This was **not** an AWS error. zsh interpreted the unquoted `?` as a filename wildcard. Quoting the URL fixed the command:
+
+```bash
+curl -i 'https://d1q0iv2raorz8j.cloudfront.net/api/ingredients/?format=json'
+```
+
+## 9. Lessons learned
+
+1. **Validate resource identifiers, not just YAML.** A valid CloudFormation template can still fail when an AWS-managed policy ID is incorrect.
+2. **Understand rollback state.** A parameter added by a failed update is not necessarily available through `UsePreviousValue`.
+3. **Check reverse-proxy headers.** Django's `ALLOWED_HOSTS` must match the `Host` header received through CloudFront and Nginx.
+4. **Keep SPA routing separate from API errors.** Distribution-wide error remapping can turn genuine API failures into HTTP 200 HTML responses.
+5. **Use change sets for live infrastructure.** Both successful changes were reviewed for resource replacement before execution.
+6. **Test failures as well as successes.** Missing API resources and missing assets exposed problems that a successful GET alone would not reveal.
+7. **Protect secrets and understand the limits of controls.** The origin header and CloudFront prefix-list restriction reduce exposure but do not replace HTTPS or user authentication.
+
+## 10. Remaining work and limitations
+
+| Item | Current state / next action |
+|---|---|
+| CloudFront SPA and API error handling | **Resolved and verified** |
+| End-to-end HTTPS | **Pending:** CloudFront-to-EC2 origin still uses HTTP; add a valid TLS certificate and HTTPS origin configuration |
+| Authentication | **Pending:** Amazon Cognito integration has not been verified in the deployed backend |
+| Database | **Pending:** SQLite is used for the midpoint environment; evaluate RDS for future requirements |
+| CI/CD | **Pending:** GitHub OIDC infrastructure exists, but automated application deployment is not complete |
+| Elastic IP infrastructure-as-code | **Pending:** EIP allocation/association were performed outside the backend CloudFormation stack |
+| SPA rewrite edge cases | Current rule treats extensionless default-origin paths as SPA routes; refine if future assets or server paths require different behavior |
+| Frontend feature integration | API availability through the shared domain is verified; actual React ingredient-search interaction should be verified separately if not already tested |
+
+## 11. Conclusion
+
+CloudFront now serves the React frontend from a private S3 bucket and routes `/api/*` requests to Django on EC2 through Nginx. The deployment was completed through CloudFormation without replacing the existing frontend distribution or bucket.
+
+We resolved an invalid CloudFront cache policy, a parameter-reuse error after rollback, a Django `ALLOWED_HOSTS` rejection, and distribution-wide SPA error handling that had masked Django 404 responses. The final API, React routing, and missing-asset tests all passed.
+
+**Final status as of October 15, 2026:** CloudFront frontend hosting, Django API routing, and SPA error handling are deployed and verified. End-to-end origin encryption, authentication, and production scalability remain future work.
