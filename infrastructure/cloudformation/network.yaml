@@ -41,18 +41,7 @@ Resources:
   # Public Subnets
   # ============================================================
 
-  # Original public subnet (currently in us-east-1e)
-  PublicSubnet:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref RecipeAppVPC
-      CidrBlock: 10.0.1.0/24
-      MapPublicIpOnLaunch: true
-      Tags:
-        - Key: Name
-          Value: recipe-app-public-subnet
-
-  # Second public subnet for EC2 (us-east-1a)
+  # Public subnet for EC2 (us-east-1a)
   PublicSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
@@ -89,14 +78,7 @@ Resources:
   # Route Table Associations
   # ============================================================
 
-  # Associate original public subnet with public route table
-  PublicSubnetRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PublicSubnet
-      RouteTableId: !Ref PublicRouteTable
-
-  # Associate second public subnet with public route table
+  # Associate public subnet with public route table
   PublicSubnetARouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -114,12 +96,6 @@ Outputs:
     Value: !Ref RecipeAppVPC
     Export:
       Name: RecipeApp-VpcId
-
-  PublicSubnetId:
-    Description: Original public subnet ID
-    Value: !Ref PublicSubnet
-    Export:
-      Name: RecipeApp-PublicSubnetId
 
   PublicSubnetAId:
     Description: Public subnet ID in us-east-1a
