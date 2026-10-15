@@ -126,22 +126,26 @@ flowchart LR
 
 ## 3. Implementation progress
 
-### 3.1 Application code
+### 3.1 Application Development
 
-Five GitHub issues were reported completed under the **MVP / Midpoint Evaluation** milestone. These establish the application's foundations, not the complete feature set.
+As of October 15, 2026, the team has closed **8 GitHub issues** under the MVP / Midpoint Evaluation milestone. These include three backend application tasks, two frontend development tasks, and three AWS infrastructure tasks.
 
-| Component | Status | Evidence / limitation |
-|---|---|---|
-| Django REST backend foundation | Implemented and locally tested | Project structure and REST API configured |
-| Canonical Ingredient API — Issue #1 | Completed and tested | Model, case-insensitive search, detail lookup, HTTP 404/405 behavior, automated tests |
-| User Profile & Preferences — Issue #2 | Completed locally; Cognito pending | Local profile/preference checks passed; cloud authentication not verified |
-| React Application Foundation — Issue #3 | Completed | React routing, layouts, shared API client foundation |
-| Dockerized Django Backend — Issue #15 | Completed; local and cloud runtime verified | Gunicorn image tested locally; Dockerized Django now responds through deployed CloudFront API path |
-| Reusable UI Design System — Issue #34 | Completed | Shared components, layout templates, and styling |
-| Recipes, inventory, recommendations, saved recipes | Pending / in development | Feature completion and integration still required |
-| Frontend-to-backend connectivity | **Cloud routing verified; user workflow pending** | Public CloudFront domain reaches Django API; no claim of complete browser-based recipe workflow |
+The completed work establishes the foundation for the Recipe Suggestion App and demonstrates progress from local development to a working AWS-hosted frontend and backend API.
 
-The shared canonical `Ingredient` model is a key dependency for inventory, recipes, and recommendations. The frontend foundation provides reusable structures for subsequent team implementation.
+| Issue | Component | Status | Implementation and Verification |
+|---|---|---|---|
+| #1 | Backend: Ingredient Foundation | Completed | Implemented the canonical Ingredient model, case-insensitive ingredient search, detail lookup, and API tests. |
+| #2 | Backend: User Profile & Preferences | Completed, with authentication integration pending | Implemented user/profile and preference functionality. Local checks passed. Amazon Cognito integration remains incomplete. |
+| #3 | Frontend: Application Foundation | Completed | Implemented React routing, shared layouts, application structure, and API service foundation. |
+| #15 | Infrastructure: Dockerize Django Backend | Completed | Containerized Django using Docker and Gunicorn. Verified API responses in a local test container and deployed the backend container to EC2. |
+| #17 | Infrastructure: Configure Amazon ECR | Completed | Configured the Amazon ECR repository and successfully pushed the backend Docker image tagged `midpoint-v1`. |
+| #18 | Infrastructure: Deploy Django Backend to EC2 | Completed | Deployed Django on EC2 using Docker, configured Nginx as a reverse proxy, and verified public API access through CloudFront. |
+| #23 | Infrastructure: Deploy React Frontend with S3 and CloudFront | Completed | Deployed the React production build to private Amazon S3, configured CloudFront with Origin Access Control, and verified HTTPS frontend delivery. |
+| #34 | Frontend: Reusable UI Design System and Layout Template | Completed | Implemented reusable frontend components, layouts, and a consistent design foundation. |
+
+**Additional security work:** Issue #40, *Security: Configure AWS IAM Identity Center and Team Access Control*, is partially completed. Its initial configuration and administrative access have been verified, but individual team onboarding and final permission testing remain pending.
+
+Although the infrastructure and foundational application tasks are complete, the full Recipe Suggestion App is still under development. Recipe recommendations, inventory management, Cognito integration, and complete end-to-end user workflows remain priorities for the final evaluation.
 
 ### 3.2 AWS infrastructure and deployment
 
@@ -173,6 +177,58 @@ The React build is stored in a private S3 bucket and served over HTTPS through C
 The backend API behavior uses the AWS-managed **CachingDisabled** policy (`4135ea2d-6df8-44a3-9df3-4b5a84be39ad`) and **AllViewerExceptHostHeader** origin request policy (`b689b0a8-53d0-40ab-baf2-68738e2966ac`). This avoids CloudFront response caching for the API and forwards request information with the EC2 origin hostname as the `Host` header.
 
 To support React client-side routes, a CloudFront Function rewrites extensionless frontend paths to `/index.html` on the default behavior. Distribution-wide 403/404-to-200 error mappings were removed because they incorrectly replaced Django API errors with frontend HTML.
+
+### AWS IAM Identity Center and Team Access Control
+
+The team has partially completed Issue #40, which focuses on centralized AWS identity management and role-based access control.
+
+The objective is to provide individual AWS identities and permissions appropriate to each team member's responsibilities, rather than sharing administrative credentials.
+
+**Completed configuration:**
+
+- Enabled and verified AWS IAM Identity Center and its access portal.
+- Confirmed the project AWS account is available for assignments.
+- Configured initial administrative and backend development groups.
+- Created permission sets for administration, backend development, and frontend development.
+- Configured initial AWS account assignments.
+- Configured AWS CLI v2 authentication through IAM Identity Center.
+- Successfully authenticated using AWS SSO and verified the active AWS identity with `aws sts get-caller-identity`.
+- Established the use of temporary AWS credentials instead of long-lived IAM access keys.
+- Documented the initial identity and access-control architecture.
+
+**Permission sets:**
+
+| Permission Set | Intended Responsibility |
+|---|---|
+| AdministratorAccess | Infrastructure administration and AWS resource management |
+| RecipeApp-BackendDev | Backend infrastructure visibility, EC2 information, CloudWatch logs, and deployment information |
+| RecipeApp-FrontendDev | Frontend S3 resources and CloudFront visibility |
+
+These permission sets support separation of administrative and developer responsibilities. They also establish a foundation for applying the principle of least privilege.
+
+**Verification status:**
+
+| Security Check | Status |
+|---|---|
+| IAM Identity Center enabled | Verified |
+| AWS access portal available | Verified |
+| Permission sets created | Configured |
+| Initial AWS account assignments | Configured |
+| AWS CLI SSO authentication | Verified |
+| AWS identity verification | Verified |
+| Temporary credential-based access | Verified |
+| Individual team member onboarding | Pending |
+| Frontend group finalization | Pending |
+| MFA enforcement verification | Pending |
+| Least-privilege permission testing | Pending |
+
+**Remaining work:**
+
+Individual Identity Center accounts must be created and activated for the required team members. The frontend group configuration must also be finalized.
+
+After onboarding, each team member's effective permissions will be tested to confirm that access is restricted to their assigned responsibilities. MFA enforcement and permission boundaries must also be verified.
+
+**Midpoint status:** The initial IAM Identity Center setup is completed and administrative SSO authentication is verified. Team-wide onboarding and final security validation remain pending.
 
 ### 3.3 Deployment evidence and remaining integration boundary
 
@@ -222,6 +278,10 @@ Content-Type: application/json
 
 The successful ingredient list returned the expected pagination structure (`count`, `next`, `previous`, `results`), with an empty `results` array. These are endpoint smoke tests, not load tests or complete user-journey tests.
 
+**GitHub milestone progress:** Eight issues have been closed under the MVP / Midpoint Evaluation milestone: #1, #2, #3, #15, #17, #18, #23, and #34.
+
+**AWS IAM Identity Center:** Initial role-based access configuration has been completed under Issue #40. AWS SSO authentication and identity verification succeeded using AWS CLI v2. Individual team access and least-privilege testing remain pending.
+
 ## 5. Challenges and lessons learned
 
 | Challenge | Cause | Resolution / lesson |
@@ -248,6 +308,8 @@ These issues reinforced the distinction between successful provisioning, healthy
 - **Container isolation:** Django is published only on EC2 loopback (`127.0.0.1:8000`); Nginx handles incoming origin traffic.
 - **IAM and administration:** EC2 uses IAM roles; Systems Manager Session Manager provides access without SSH; GitHub OIDC infrastructure is configured for future short-lived credentials.
 - **Additional infrastructure controls:** ECR immutable tags and image scanning, encrypted EC2 root EBS volume, and IMDSv2 requirement were configured during infrastructure setup.
+
+The project also uses AWS IAM Identity Center for centralized human access management. Initial administrative, backend development, and frontend development permission sets have been configured. AWS CLI authentication through IAM Identity Center has been verified, allowing the project manager to access AWS using temporary credentials instead of long-lived IAM access keys. Individual developer onboarding, MFA verification, and least-privilege testing remain pending.
 
 ### 6.2 Security limitations
 
@@ -285,7 +347,11 @@ CloudFront can distribute and cache static frontend assets, but this does not de
 
 ## 9. Midpoint conclusion
 
-The project has progressed from an initial proposal to a structured React/Django codebase with five reported completed MVP issues covering ingredient management, user profiles, frontend structure, reusable UI design, and containerization. The team has also deployed AWS networking, EC2 compute, Dockerized Django, ECR, a private S3 frontend, and a CloudFront distribution using CloudFormation.
+As of October 15, 2026, the Recipe Suggestion App has progressed from an initial proposal to a structured Django/React application with **eight completed GitHub issues** under the MVP / Midpoint Evaluation milestone. These tasks cover ingredient management, user profiles and preferences, frontend application structure, reusable UI components, Docker containerization, Amazon ECR, EC2 backend deployment, and S3/CloudFront frontend hosting.
+
+The team has also partially completed AWS IAM Identity Center configuration under Issue #40, establishing centralized identity management, role-based permission sets, and verified AWS SSO authentication.
+
+The deployed infrastructure now supports HTTPS access to the React frontend and Django REST API through Amazon CloudFront. The remaining development phase focuses on completing recipe recommendation workflows, authentication integration, persistent data storage, deployment automation, and measurable scalability testing.
 
 **The principal infrastructure milestone is now verified:** requests to the public CloudFront HTTPS domain reach the Django REST API through Nginx on EC2. Successful requests return JSON, nonexistent ingredients return proper HTTP 404 JSON errors, React routes return frontend HTML, and missing static assets retain error responses. These checks demonstrate a working deployed request path rather than only provisioned resources.
 
