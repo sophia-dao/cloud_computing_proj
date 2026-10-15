@@ -254,21 +254,62 @@ Although these five issues are closed, **the full application is not yet complet
 
 ### 3.2 AWS Infrastructure and Deployment Preparation
 
+The team has deployed the initial AWS infrastructure using AWS CloudFormation. The backend uses Amazon EC2 and Amazon ECR, while the React frontend is hosted on Amazon S3 and delivered through Amazon CloudFront.
+
 | Resource / Practice | Current Status | Verification Performed |
-| --- | --- | --- |
-| EC2 backend instance (`t3.micro`) | Deployed — not publicly accessible | CloudFormation backend stack completed; EC2 instance provisioned successfully |
-| Docker on EC2 | Verified | Docker version and service status checked via Systems Manager |
+|---|---|---|
+| VPC, Internet Gateway, route table, two public subnets | Deployed | CloudFormation network stack successfully deployed and updated |
+| EC2 backend instance (`t3.micro`) | Deployed | Backend infrastructure stack completed successfully |
+| Docker on EC2 | Verified | Docker version and service status checked through AWS Systems Manager |
 | AWS Systems Manager | Verified | Interactive session established without inbound SSH |
-| Dockerized Django | Verified locally only | API returned HTTP 200 in a local Docker container after migrations; deployment on EC2 not yet verified |
-| Public backend API endpoint | Not implemented | EC2 security group has no inbound rules; public API connectivity has not been established |
-| Amazon ECR                                             | Deployed           | `recipe-app-backend:midpoint-v1` image pushed                     |
-| GitHub Actions deployment workflow                     | Planned            | Implementation postponed until after midpoint evaluation         |
-| Amazon RDS                                             | Not implemented    | SQLite currently used in local prototype                          |
-| AWS-hosted React frontend                              | Not verified       | S3/CloudFront hosting remains planned                             |
+| Amazon ECR | Deployed | Backend Docker image `recipe-app-backend:midpoint-v1` pushed successfully |
+| Dockerized Django | Verified locally | API returned HTTP 200 after database migrations in a test container |
+| GitHub OIDC identity provider | Configured | AWS identity provider created for GitHub Actions authentication; automated deployment not yet verified |
+| Amazon S3 frontend bucket | Deployed | Production React build uploaded to the S3 bucket |
+| Amazon CloudFront | Deployed | CloudFront distribution created and configured to serve frontend files over HTTPS |
+| CloudFront Origin Access Control (OAC) | Configured | Private S3 origin configured for CloudFront access |
+| React production build | Verified | Vite successfully compiled 93 modules |
+| Public frontend HTTP endpoint | Verified | CloudFront returned HTTP 200 with `Content-Type: text/html` |
+| Public Django backend API | Pending | EC2 infrastructure deployed, but API not yet publicly accessible |
+| Automated frontend deployment | Pending | GitHub Actions deployment workflow not yet implemented |
 
-**Infrastructure specifics:** AWS region `us-east-1`; VPC CIDR `10.0.0.0/16`; public subnets `10.0.1.0/24` and `10.0.2.0/24`. The backend EC2 security group has no inbound rules at the midpoint, so public access to Django is **not yet available**. The EC2 instance uses an IAM role for Systems Manager access and scoped ECR image retrieval.
+#### Frontend Deployment
 
-The team has successfully provisioned the core AWS networking, compute, and container registry infrastructure using CloudFormation. GitHub OIDC authentication and automated CI/CD deployment remain planned improvements for the next development phase.
+The React frontend was built using Vite and deployed to Amazon S3. Amazon CloudFront provides HTTPS access and content delivery.
+
+The frontend infrastructure is managed using the CloudFormation template at `infrastructure/cloudformation/frontend.yaml`.
+
+**Deployed AWS resources:**
+
+- CloudFormation stack: `recipe-app-frontend`
+- S3 bucket: `recipe-app-frontend-frontendbucket-yhbrd6afosjk`
+- CloudFront distribution: `E2YMECNRA0V5YR`
+- Frontend URL: https://d1q0iv2raorz8j.cloudfront.net
+
+**Deployment verification:**
+
+The frontend was tested using:
+
+```bash
+curl -I https://d1q0iv2raorz8j.cloudfront.net
+```
+
+The response confirmed:
+
+```text
+HTTP/1.1 200 OK
+Content-Type: text/html
+Server: AmazonS3
+X-Cache: Miss from cloudfront
+```
+
+This verifies that CloudFront can successfully retrieve and deliver the frontend HTML from Amazon S3. Browser rendering, navigation, and full frontend-backend integration require separate verification.
+
+#### Current Limitations and Next Steps
+
+The frontend's static hosting infrastructure is operational, but the Django backend is not yet publicly accessible. Therefore, frontend features requiring backend API communication are not yet verified in the deployed environment.
+
+The next deployment tasks are to make the Django API securely accessible, configure frontend API connectivity and CORS, and implement automated deployment using GitHub Actions and AWS OIDC authentication.
 
 ## 4. Testing and evidence
 
