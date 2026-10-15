@@ -2,23 +2,33 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.http import QueryDict
 from django.test import RequestFactory, TestCase
+from unittest.mock import patch
+
 from rest_framework import serializers
 
 from apps.recipes.filters import (
     MAX_SEARCH_LENGTH,
     MAX_VALUES_PER_FILTER,
+    ALLERGEN_FILTERING_UNAVAILABLE,
     MatchMode,
     RecipeFilterCriteria,
     apply_user_defaults,
     get_request_application_user,
     parse_recipe_filters,
 )
+from apps.recipes.models import Tag
 from apps.users.models import (
     Allergen,
-    Tag,
+    Tag as UserTag,
     User,
     UserAllergy,
     UserPreference,
+)
+
+# Ingredients are not yet linked to Allergens, so allergen resolution is
+# exercised with filtering forced on; the unavailable path is tested separately.
+allergen_filtering_on = patch(
+    "apps.recipes.filters.allergen_filtering_available", return_value=True
 )
 
 
@@ -130,7 +140,8 @@ class ParseRecipeFiltersTests(RecipeFilterTestData):
             criteria.tag_ids_by_type[Tag.TagType.DIET], {self.vegan.id}
         )
 
-    def test_combined_filters(self):
+    @allergen_filtering_on
+    def test_combined_filters(self, _available):
         criteria = parse_recipe_filters(
             params("search=rice&cuisine=korean&diet=vegan&allergy=peanut")
         )
@@ -145,7 +156,8 @@ class ParseRecipeFiltersTests(RecipeFilterTestData):
         )
         self.assertEqual(criteria.excluded_allergen_ids, {self.peanut.id})
 
-    def test_allergy_names_and_allergen_ids_are_combined(self):
+    @allergen_filtering_on
+    def test_allergy_names_and_allergen_ids_are_combined(self, _available):
         criteria = parse_recipe_filters(
             params(f"allergy=PEANUT&allergen={self.shellfish.id}")
         )
@@ -154,7 +166,8 @@ class ParseRecipeFiltersTests(RecipeFilterTestData):
             {self.peanut.id, self.shellfish.id},
         )
 
-    def test_lookups_use_one_tag_and_one_allergen_query(self):
+    @allergen_filtering_on
+    def test_lookups_use_one_tag_and_one_allergen_query(self, _available):
         with self.assertNumQueries(2):
             parse_recipe_filters(
                 params(
@@ -169,8 +182,14 @@ class ParseRecipeFiltersTests(RecipeFilterTestData):
         self.assertEqual(len(messages), 1)
         self.assertIn("martian", str(messages[0]))
 
-    def test_unknown_allergy_is_rejected_not_ignored(self):
+    @allergen_filtering_on
+    def test_unknown_allergy_is_rejected_not_ignored(self, _available):
         self.assert_invalid("allergy=peanutt", "allergy")
+
+    def test_allergy_filters_rejected_until_ingredients_have_allergens(self):
+        for query, field in (("allergy=peanut", "allergy"), (f"allergen={self.peanut.id}", "allergen")):
+            messages = self.assert_invalid(query, field)
+            self.assertEqual([str(m) for m in messages], [ALLERGEN_FILTERING_UNAVAILABLE])
 
     def test_non_numeric_tag_id_is_rejected(self):
         self.assert_invalid("tag=abc", "tag")
@@ -182,7 +201,8 @@ class ParseRecipeFiltersTests(RecipeFilterTestData):
     def test_nonexistent_tag_id_is_rejected(self):
         self.assert_invalid("tag=99999", "tag")
 
-    def test_nonexistent_allergen_id_is_rejected(self):
+    @allergen_filtering_on
+    def test_nonexistent_allergen_id_is_rejected(self, _available):
         self.assert_invalid("allergen=99999", "allergen")
 
     def test_blank_value_is_rejected(self):
@@ -223,15 +243,24 @@ class UserDefaultsTests(RecipeFilterTestData):
             username="alice", password="TestPassword123!"
         )
         cls.user = User.objects.create(auth_user=cls.auth_user)
-        UserPreference.objects.create(user=cls.user, tag=cls.vietnamese)
-        UserPreference.objects.create(user=cls.user, tag=cls.halal)
+
+        # Saved preferences point at users.Tag; filters bridge them to the
+        # recipes.Tag with the same type and name (see _saved_preference_tags).
+        UT = UserTag.TagType
+        cls.pref_vietnamese = UserTag.objects.create(name="vietnamese", type=UT.CUISINE)
+        cls.pref_halal = UserTag.objects.create(name="Halal", type=UT.DIET)
+        cls.pref_cheap = UserTag.objects.create(name="Cheap", type=UT.COST)
+        cls.pref_unmatched = UserTag.objects.create(name="Keto", type=UT.DIET)
+
+        UserPreference.objects.create(user=cls.user, tag=cls.pref_vietnamese)
+        UserPreference.objects.create(user=cls.user, tag=cls.pref_halal)
         UserAllergy.objects.create(user=cls.user, allergen=cls.peanut)
 
         other_auth = AuthUser.objects.create_user(
             username="bob", password="TestPassword123!"
         )
         cls.other_user = User.objects.create(auth_user=other_auth)
-        UserPreference.objects.create(user=cls.other_user, tag=cls.cheap)
+        UserPreference.objects.create(user=cls.other_user, tag=cls.pref_cheap)
         UserAllergy.objects.create(user=cls.other_user, allergen=cls.milk)
 
     def defaults_for(self, query_string, user):
@@ -265,7 +294,8 @@ class UserDefaultsTests(RecipeFilterTestData):
             criteria.tag_ids_by_type[Tag.TagType.DIET], {self.halal.id}
         )
 
-    def test_explicit_allergies_extend_saved_allergies(self):
+    @allergen_filtering_on
+    def test_explicit_allergies_extend_saved_allergies(self, _available):
         criteria = self.defaults_for("allergy=shellfish", self.user)
         self.assertEqual(
             criteria.excluded_allergen_ids, {self.peanut.id, self.shellfish.id}
@@ -284,9 +314,19 @@ class UserDefaultsTests(RecipeFilterTestData):
         self.assertNotIn(self.cheap.id, all_tag_ids)
         self.assertNotIn(self.milk.id, criteria.excluded_allergen_ids)
 
-    def test_defaults_use_two_queries(self):
+    def test_saved_preference_without_matching_recipe_tag_is_skipped(self):
+        UserPreference.objects.create(user=self.user, tag=self.pref_unmatched)
+
+        criteria = self.defaults_for("", self.user)
+
+        self.assertEqual(
+            criteria.tag_ids_by_type[Tag.TagType.DIET], {self.halal.id}
+        )
+
+    def test_defaults_use_three_queries(self):
+        # Saved allergies, saved preferences, and the recipe Tag bridge.
         criteria = parse_recipe_filters(params(""))
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             apply_user_defaults(criteria, self.user)
 
     def test_result_is_a_new_criteria_object(self):

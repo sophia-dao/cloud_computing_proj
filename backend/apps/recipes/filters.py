@@ -2,23 +2,32 @@
 Recipe search and filter parameters (issue #13).
 
 Parses and validates GET /api/recipes/ query parameters into structured
-criteria made of canonical Tag and Allergen IDs, and merges an authenticated
-user's saved preferences and allergies into those criteria.
-
-This module deliberately does not depend on the Recipe model, which is owned
-by issue #4. Translating RecipeFilterCriteria into a Recipe queryset is added
-once Recipe, RecipeIngredient, and the Ingredient-Allergen relationship exist.
+criteria made of canonical Tag and Allergen IDs, merges an authenticated
+user's saved preferences and allergies into those criteria, and applies the
+criteria to a Recipe queryset.
 
 The contract implemented here is documented in docs/api-design.md,
 section 19.1 (proposed, pending team review).
+
+Known gaps, pending team decisions:
+- Two Tag models exist: recipes.Tag (used by Recipe.tags) and users.Tag (used
+  by UserPreference). Filters resolve against recipes.Tag. Saved preferences
+  are bridged by (type, name) in _saved_preference_tags(); delete that bridge
+  once the models are consolidated.
+- Ingredients are not yet linked to Allergens, so allergen exclusion cannot
+  run. Explicit allergy filters are rejected with 400 instead of being
+  silently ignored. See allergen_filtering_available().
 """
 
 from dataclasses import dataclass, field
 
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from rest_framework import serializers
 
-from apps.users.models import Allergen, Tag, User, UserAllergy, UserPreference
+from apps.ingredients.models import Ingredient
+from apps.users.models import Allergen, User, UserAllergy, UserPreference
+
+from .models import Recipe, RecipeIngredient, Tag
 
 
 MAX_SEARCH_LENGTH = 255
@@ -56,6 +65,21 @@ TAG_ID_PARAM = "tag"
 ALLERGEN_ID_PARAM = "allergen"
 ALLERGEN_NAME_PARAM = "allergy"
 USE_PREFERENCES_PARAM = "use_preferences"
+
+# Expected name of the Ingredient <-> Allergen many-to-many field
+# (docs/database-design.md section 13). It does not exist yet.
+INGREDIENT_ALLERGEN_FIELD = "allergens"
+
+ALLERGEN_FILTERING_UNAVAILABLE = (
+    "Allergen filtering is not available yet: ingredients are not linked "
+    "to allergens."
+)
+
+
+def allergen_filtering_available():
+    return any(
+        f.name == INGREDIENT_ALLERGEN_FIELD for f in Ingredient._meta.get_fields()
+    )
 
 
 @dataclass(frozen=True)
@@ -99,6 +123,16 @@ def parse_recipe_filters(query_params):
     }
     allergen_ids = _parse_ids(query_params, ALLERGEN_ID_PARAM, errors)
     allergen_names = _parse_names(query_params, ALLERGEN_NAME_PARAM, errors)
+
+    if (allergen_ids or allergen_names) and not allergen_filtering_available():
+        # Rejected rather than ignored: returning recipes the client believes
+        # were allergen-filtered would be unsafe.
+        for param, values in (
+            (ALLERGEN_ID_PARAM, allergen_ids),
+            (ALLERGEN_NAME_PARAM, allergen_names),
+        ):
+            if values:
+                errors[param] = [ALLERGEN_FILTERING_UNAVAILABLE]
 
     if errors:
         raise serializers.ValidationError(errors)
@@ -162,9 +196,7 @@ def apply_user_defaults(criteria, application_user):
 
     if criteria.use_preferences:
         saved_preferences = {}
-        for tag_id, tag_type in UserPreference.objects.filter(
-            user=application_user,
-        ).values_list("tag_id", "tag__type"):
+        for tag_id, tag_type in _saved_preference_tags(application_user):
             saved_preferences.setdefault(tag_type, set()).add(tag_id)
 
         for tag_type, ids in saved_preferences.items():
@@ -178,6 +210,75 @@ def apply_user_defaults(criteria, application_user):
         | frozenset(saved_allergen_ids),
         use_preferences=criteria.use_preferences,
     )
+
+
+def filter_recipes(queryset, criteria):
+    """
+    Apply criteria to a Recipe queryset entirely in the database.
+
+    Relationship conditions use EXISTS subqueries rather than joins, so a
+    Recipe is returned at most once without needing distinct(), and the
+    queryset's ordering and prefetching are preserved.
+    """
+    if criteria.search:
+        queryset = queryset.filter(name__icontains=criteria.search)
+
+    for tag_type, tag_ids in criteria.tag_ids_by_type.items():
+        if criteria.match_mode(tag_type) == MatchMode.ANY:
+            queryset = queryset.filter(_has_any_tag(tag_ids))
+        else:
+            for tag_id in tag_ids:
+                queryset = queryset.filter(_has_any_tag([tag_id]))
+
+    # Until ingredients are linked to allergens, saved allergies cannot be
+    # enforced here (explicit allergy filters are already rejected by
+    # parse_recipe_filters). Tracked in docs/api-design.md section 19.1.
+    if criteria.excluded_allergen_ids and allergen_filtering_available():
+        queryset = queryset.exclude(
+            Exists(
+                RecipeIngredient.objects.filter(
+                    recipe=OuterRef("pk"),
+                    **{
+                        f"ingredient__{INGREDIENT_ALLERGEN_FIELD}__in":
+                            criteria.excluded_allergen_ids
+                    },
+                )
+            )
+        )
+
+    return queryset
+
+
+def _has_any_tag(tag_ids):
+    return Exists(
+        Recipe.tags.through.objects.filter(
+            recipe_id=OuterRef("pk"),
+            tag_id__in=tag_ids,
+        )
+    )
+
+
+def _saved_preference_tags(application_user):
+    """
+    Return (recipes.Tag id, type) pairs for the user's saved preferences.
+
+    TEMPORARY BRIDGE: UserPreference points at users.Tag while recipes use
+    recipes.Tag, so preferences are matched by (type, case-insensitive name).
+    A preference with no matching recipe Tag is skipped. Replace this with
+    the preference IDs directly once the two Tag models are consolidated.
+    """
+    saved = list(
+        UserPreference.objects.filter(user=application_user)
+        .values_list("tag__type", "tag__name")
+    )
+    if not saved:
+        return []
+
+    lookup = Q()
+    for tag_type, name in saved:
+        lookup |= Q(type=tag_type, name__iexact=name)
+
+    return list(Tag.objects.filter(lookup).values_list("id", "type"))
 
 
 def _parse_search(query_params, errors):

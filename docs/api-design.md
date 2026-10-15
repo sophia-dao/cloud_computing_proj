@@ -737,7 +737,7 @@ User-facing convenience filters such as cuisine or dietary filters should intern
 
 ## 19.1 Recipe Search and Filtering Contract
 
-> **Status: Proposed (issue #13), pending team review.** The parameter parsing and default-merging rules below are implemented in `backend/apps/recipes/filters.py`. Applying them to Recipe queries depends on the Recipe models from issue #4.
+> **Status: Proposed (issue #13), pending team review.** Implemented on `GET /api/recipes/` (`backend/apps/recipes/filters.py`), except allergen exclusion, which needs the Ingredient → Allergen link (see *Current limitations*).
 
 ### Parameters
 
@@ -752,7 +752,7 @@ User-facing convenience filters such as cuisine or dietary filters should intern
 | `allergen` | Allergen ID | Yes | Exclude Recipes containing this Allergen. |
 | `allergy` | Allergen name | Yes | Convenience form of `allergen`. The name is matched case-insensitively. |
 | `use_preferences` | `true` or `false`, default `true` | No | Whether saved Tag preferences apply (Registered Users only). Saved allergies always apply. |
-| `page`, `page_size` | Integers | No | Pagination, as in section 11. |
+| `page`, `page_size` | Integers | No | Pagination, as in section 11. Default page size 20, maximum 100. |
 
 Multiple values use **repeated parameters**, not comma-separated lists:
 
@@ -802,12 +802,22 @@ Invalid input returns `400 Bad Request` with field-specific messages, and no res
 
 Unrecognized parameter names are ignored.
 
+### Current limitations
+
+- **Allergen exclusion is not active yet.** `Ingredient` has no relationship to `Allergen`, so recipes cannot be checked for allergens. Until it exists:
+  - Requests with `allergy` or `allergen` return `400` with *"Allergen filtering is not available yet: ingredients are not linked to allergens."* They are rejected rather than ignored, so a client never receives results it believes were allergen-filtered.
+  - A Registered User's **saved allergies cannot be enforced** on search results.
+  - The exclusion query and its test are already written. Both activate automatically once `Ingredient` gains an `allergens` many-to-many field.
+- **Two Tag models exist.** `Recipe.tags` uses `recipes.Tag`, while `UserPreference` uses `users.Tag`. Filters resolve against `recipes.Tag`. Saved preferences are temporarily matched to recipe Tags by type and case-insensitive name; a saved preference with no matching recipe Tag is skipped. This bridge should be removed once the models are consolidated.
+
 ### Open questions for the team
 
-1. `?tag_type=CUISINE` is listed above but its meaning is undefined (for example, "Recipes that have any CUISINE Tag"). Is it still needed? It is not implemented yet.
-2. Should saved Tag preferences apply by default (as proposed), or only when the frontend opts in?
-3. Which Recipe fields does `search` cover: name only (as proposed), or also description?
-4. Default ordering: name, then ID (proposed, matching the Ingredient API).
+1. Consolidate `recipes.Tag` and `users.Tag` into one shared Tag model (database-design.md section 15 describes one).
+2. Who adds the Ingredient → Allergen relationship (database-design.md section 13), and in which app?
+3. `?tag_type=CUISINE` is listed above but its meaning is undefined (for example, "Recipes that have any CUISINE Tag"). Is it still needed? It is not implemented yet.
+4. Should saved Tag preferences apply by default (as proposed), or only when the frontend opts in?
+5. Which Recipe fields does `search` cover: name only (as proposed), or also description?
+6. Default ordering: name, then ID (proposed, matching the Ingredient API).
 
 ---
 
