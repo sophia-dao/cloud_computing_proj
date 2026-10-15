@@ -1,680 +1,255 @@
-# AWS Infrastructure
+# AWS Infrastructure — Recipe Suggestion App
 
-Infrastructure as Code (IaC) for the **Recipe Suggestion App**, managed with AWS CloudFormation. Templates are version-controlled and deployed to **`us-east-1`**.
+**Last verified:** October 14, 2026 (US Central)  
+**Region:** `us-east-1`  
+**AWS CLI profile:** `recipe-app`  
+**Status:** React frontend deployed through CloudFront; Django API running on EC2 and verified **locally only**. Frontend-to-backend routing is **not yet configured**.
 
-> **Current state (October 14, 2026):** Networking, ECR, EC2, and S3/CloudFront frontend infrastructure are deployed. The backend image is in ECR and the React build is served through CloudFront (HTTP 200). Browser-level verification, Django on EC2, public API access, and production database storage are **not yet complete**.
-
-## 1. Architecture and deployment status**
-
-| Component | Stack | Status |
-
-| --- | --- | --- |
-
-| Dedicated VPC, Internet Gateway, routing, two public subnets | `recipe-app-network` | Deployed |
-
-| Backend container registry | `recipe-app-ecr` | Deployed; `midpoint-v1` image pushed |
-
-| EC2, security group, IAM instance role | `recipe-app-backend` | Deployed (`CREATE_COMPLETE`) |
-
-| Django container on EC2 | — | Pending |
-
-| Persistent production database (Amazon RDS) | — | Planned |
-
-| React frontend (S3 + CloudFront) | `recipe-app-frontend` | Deployed; HTTP 200 verified through CloudFront |
-
-| CI/CD | — | Planned |
-
-### Directory structure**
+## 1. Architecture
 
 ```text
+Browser
+   |
+   | HTTPS
+   v
+CloudFront distribution (E2YMECNRA0V5YR)
+   |
+   | Default behavior: static frontend
+   v
+Private S3 bucket (React/Vite build)
 
+[PLANNED — NOT CONNECTED]
+CloudFront /api/* behavior
+   |
+   | Custom origin via existing Internet Gateway/public subnet
+   v
+EC2 backend (Docker + Gunicorn + Django)
+   |
+   v
+Temporary SQLite database (host-mounted file)
+```
+
+**Important:** The current CloudFront distribution serves the frontend only. There is no public API endpoint, `/api/*` origin behavior, or browser-to-Django connection yet. The planned Internet Gateway design requires additional origin security, stable addressing/DNS, and an appropriate HTTPS/reverse-proxy configuration. CloudFront viewer HTTPS alone does **not** guarantee HTTPS to the EC2 origin.
+
+## 2. Deployment inventory
+
+| Component | CloudFormation stack / resource | Verified state |
+| --- | --- | --- |
+| VPC, Internet Gateway, route table, two public subnets | `recipe-app-network` | Deployed |
+| ECR backend image registry | `recipe-app-ecr` | Deployed; image tagged `midpoint-v1` pushed |
+| EC2, IAM role/profile, security group | `recipe-app-backend` | Deployed; instance running |
+| Dockerized Django API | Container on EC2 | Running; `/api/ingredients/` returned HTTP 200 from EC2 localhost |
+| S3 bucket, CloudFront OAC and distribution | `recipe-app-frontend` | Deployed; CloudFront returned HTTP 200 |
+| Systems Manager Session Manager | EC2 IAM role / SSM | Interactive session verified; no inbound SSH rule |
+| GitHub OIDC provider | AWS account | Identity provider configured; automated deployments not implemented |
+| Public backend API | — | **Not configured** |
+| CloudFront API routing | — | **Not configured** |
+| Cognito authentication | — | **Not verified/implemented end-to-end** |
+| RDS / production database | — | **Not deployed** |
+| Automated CI/CD | — | **Not implemented** |
+| ALB / Auto Scaling | — | **Not deployed** |
+
+### Infrastructure files
+
+```text
 infrastructure/
-
 ├── README.md
-
 └── cloudformation/
-
     ├── network.yaml
-
     ├── ecr.yaml
-
     ├── backend.yaml
     └── frontend.yaml
-
 ```
 
-### Network configuration**
+## 3. Network
 
 | Resource | Configuration |
-
 | --- | --- |
+| VPC | `10.0.0.0/16` (`vpc-0197766fbe7061905`) |
+| Original public subnet | `10.0.1.0/24`, currently `us-east-1e` |
+| Backend public subnet | `10.0.2.0/24`, `us-east-1a` |
+| Internet Gateway | Attached to VPC |
+| Public route table | `0.0.0.0/0` routes to Internet Gateway |
+| Subnet associations | Both public subnets use public route table |
+| Private subnets / NAT Gateway | Not created |
 
-| VPC | `10.0.0.0/16` |
+Network exports: `RecipeApp-VpcId`, `RecipeApp-PublicSubnetId`, `RecipeApp-PublicSubnetAId`, and `RecipeApp-PublicRouteTableId`.
 
-| Original public subnet | `10.0.1.0/24` (currently `us-east-1e`) |
+**Why two subnets?** The original subnet was in `us-east-1e`; a second subnet was added in `us-east-1a` to launch the chosen EC2 instance type.
 
-| Backend public subnet | `10.0.2.0/24` (`us-east-1a`) |
+## 4. Backend EC2 and security
 
-| Internet Gateway | Attached to the dedicated VPC |
+- **Instance ID:** `i-0f80e33afb9d7dd0a`
+- **Type:** `t3.micro`
+- **OS:** Amazon Linux 2023 (AMI resolved through the public SSM parameter)
+- **Root volume:** 12 GiB encrypted gp3, `DeleteOnTermination: true`
+- **Subnet:** public subnet in `us-east-1a`
+- **Security group:** `sg-0924c0659e225b906`
+- **Instance permissions:** `AmazonSSMManagedInstanceCore`, plus limited ECR image-pull actions
+- **IMDS:** IMDSv2 required (`HttpTokens: required`)
+- **Administration:** Systems Manager Session Manager; no inbound SSH access configured
 
-| Public route table | Default route `0.0.0.0/0` to Internet Gateway |
+### Security group verification
 
-| Route table associations | Both public subnets |
+Actual rule query confirmed:
 
-| Backend instance | Single EC2 instance in `us-east-1a` |
+| Direction | Rule |
+| --- | --- |
+| Inbound | None |
+| Outbound | All IPv4 traffic to `0.0.0.0/0` |
 
-The second subnet was added because `t3.micro` was unavailable in `us-east-1e` for this account. **Two subnets do not make the application highly available:** only one EC2 instance is deployed.
+CloudFormation drift detection on the backend stack completed with `StackDriftStatus: IN_SYNC` and `DriftedStackResourceCount: 0` on October 14, 2026 (local time; detection timestamp `2026-10-15T00:32:41.916Z`). An earlier summarized security-group query showed empty egress, but a direct `describe-security-group-rules` check confirmed the outbound rule (`sgr-0b193a389807c2e27`). **No security group modifications were made during this investigation.**
 
-The backend security group currently has **no inbound rules**. SSH (port 22) is not exposed; EC2 administration uses AWS Systems Manager Session Manager. The API is not publicly reachable yet.
-
-## 2. Prerequisites and authentication**
-
-\- AWS CLI v2 installed and configured for IAM Identity Center (SSO).
-
-\- AWS account permissions for CloudFormation, VPC, ECR, EC2, and IAM.
-
-\- Docker installed locally to build and push images.
-
-\- Session Manager plugin installed locally to open interactive EC2 sessions.
-
-\- Run repository-relative commands from the **repository root**.
-
-The commands below use the local profile `recipe-app`; other developers should substitute their own profile name.
+### Connect to the instance
 
 ```bash
-
 aws sso login --profile recipe-app
-
-aws sts get-caller-identity --profile recipe-app
-
-aws configure get region --profile recipe-app
-
-```
-
-Expected region: `us-east-1`. SSO uses temporary credentials rather than permanent IAM user access keys.
-
-See [IAM Access Control](../docs/aws/iam-access-control.md) for project access-control documentation.
-
-## 3. VPC and networking**
-
-**Template:** `infrastructure/cloudformation/network.yaml`  
-
-**Stack:** `recipe-app-network`
-
-### Inspect existing VPCs**
-
-```bash
-
-aws ec2 describe-vpcs \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app \
-
-  \--query 'Vpcs[*].[VpcId,CidrBlock,IsDefault]' \
-
-  \--output table
-
-```
-
-### Validate and deploy**
-
-```bash
-
-aws cloudformation validate-template \
-
-  \--template-body file://infrastructure/cloudformation/network.yaml \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app
-
-aws cloudformation deploy \
-
-  \--template-file infrastructure/cloudformation/network.yaml \
-
-  \--stack-name recipe-app-network \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app
-
-```
-
-Validation checks the template format and references that CloudFormation can validate; it does **not** guarantee a successful deployment.
-
-### Verify the network**
-
-```bash
-
-aws cloudformation describe-stacks \
-
-  \--stack-name recipe-app-network \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app \
-
-  \--query 'Stacks[0].[StackName,StackStatus]' \
-
-  \--output table
-
-aws cloudformation describe-stack-resources \
-
-  \--stack-name recipe-app-network \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app \
-
-  \--query 'StackResources[*].[LogicalResourceId,ResourceType,ResourceStatus]' \
-
-  \--output table
-
-aws cloudformation describe-stacks \
-
-  \--stack-name recipe-app-network \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app \
-
-  \--query 'Stacks[0].Outputs' \
-
-  \--output table
-
-```
-
-Known outputs:
-
-| Export | Purpose |
-
-| --- | --- |
-
-| `RecipeApp-VpcId` | Shared VPC reference |
-
-| `RecipeApp-PublicSubnetId` | Original public subnet |
-
-| `RecipeApp-PublicSubnetAId` | Backend public subnet (`us-east-1a`) |
-
-| `RecipeApp-PublicRouteTableId` | Public route table |
-
-The deployed VPC ID is `vpc-0197766fbe7061905`. Resource IDs may change if stacks are recreated; prefer CloudFormation exports over hardcoding IDs in templates.
-
-## 4. Amazon ECR**
-
-**Template:** `infrastructure/cloudformation/ecr.yaml`  
-
-**Stack:** `recipe-app-ecr`  
-
-**Repository:** `recipe-app-backend`
-
-The repository stores versioned backend Docker images, uses immutable tags, enables scanning on push, and encrypts images at rest.
-
-### Validate and deploy**
-
-```bash
-
-aws cloudformation validate-template \
-
-  \--template-body file://infrastructure/cloudformation/ecr.yaml \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app
-
-aws cloudformation deploy \
-
-  \--template-file infrastructure/cloudformation/ecr.yaml \
-
-  \--stack-name recipe-app-ecr \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app
-
-```
-
-### Verify repository and image**
-
-```bash
-
-aws ecr describe-repositories \
-
-  \--repository-names recipe-app-backend \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app
-
-aws ecr describe-images \
-
-  \--repository-name recipe-app-backend \
-
-  \--image-ids imageTag=midpoint-v1 \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app
-
-```
-
-### Build and push from a development machine**
-
-The EC2 template uses an x86_64 Amazon Linux 2023 AMI, so the image must support `linux/amd64`.
-
-```bash
-
-aws ecr get-login-password \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app \
-
-  | docker login \
-
-      \--username AWS \
-
-      \--password-stdin \
-
-      362176666546.dkr.ecr.us-east-1.amazonaws.com
-
-docker build --platform linux/amd64 \
-
-  -t recipe-app-backend:midpoint-v1 \
-
-  ./backend
-
-docker tag recipe-app-backend:midpoint-v1 \
-
-  362176666546.dkr.ecr.us-east-1.amazonaws.com/recipe-app-backend:midpoint-v1
-
-docker push \
-
-  362176666546.dkr.ecr.us-east-1.amazonaws.com/recipe-app-backend:midpoint-v1
-
-```
-
-Use a **new image tag** for future releases because the ECR repository uses immutable tags.
-
-CloudFormation exports the repository URI and ARN for use by other stacks. The EC2 instance role has ECR pull permissions, not push permissions.
-
-## 5. EC2 backend infrastructure**
-
-**Template:** `infrastructure/cloudformation/backend.yaml`  
-
-**Stack:** `recipe-app-backend`  
-
-**Instance type:** `t3.micro`  
-
-**Operating system:** Amazon Linux 2023
-
-The template provisions:
-
-\- An EC2 instance in `RecipeApp-PublicSubnetAId` (`us-east-1a`).
-
-\- An encrypted 12 GiB gp3 root EBS volume.
-
-\- A security group with no inbound rules initially.
-
-\- An IAM instance profile for Systems Manager and read-only ECR image retrieval.
-
-\- IMDSv2-required instance metadata.
-
-\- User data that installs and starts Docker and creates `/opt/recipe-app/data`.
-
-### Validate and deploy**
-
-```bash
-
-aws cloudformation validate-template \
-
-  \--template-body file://infrastructure/cloudformation/backend.yaml \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app
-
-aws cloudformation deploy \
-
-  \--template-file infrastructure/cloudformation/backend.yaml \
-
-  \--stack-name recipe-app-backend \
-
-  \--capabilities CAPABILITY_IAM \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app
-
-```
-
-### Verify EC2**
-
-```bash
-
-aws cloudformation describe-stacks \
-
-  \--stack-name recipe-app-backend \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app \
-
-  \--query 'Stacks[0].[StackStatus,Outputs]' \
-
-  \--output json
-
-aws ec2 describe-instances \
-
-  \--instance-ids i-0f80e33afb9d7dd0a \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app \
-
-  \--query 'Reservations[].Instances[].[InstanceId,State.Name,Placement.AvailabilityZone,PublicIpAddress]' \
-
-  \--output table
-
-```
-
-**Verified stack status:** `CREATE_COMPLETE`  
-
-**Deployed instance ID:** `i-0f80e33afb9d7dd0a`  
-
-**Reported public IPv4:** `184.192.191.75` (may change after instance stop/start)
-
-The instance's public IP does **not** mean the API is publicly accessible: the security group currently denies inbound connections.
-
-### Verify Systems Manager registration**
-
-```bash
-
-aws ssm describe-instance-information \
-
-  \--filters Key=InstanceIds,Values=i-0f80e33afb9d7dd0a \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app \
-
-  \--query 'InstanceInformationList[].[InstanceId,PingStatus,PlatformName]' \
-
-  \--output table
-
-```
-
-**Verified result:** `Online` / `Amazon Linux`.
-
-## 6. Connect to EC2 with Session Manager**
-
-Session Manager avoids opening SSH port 22 and does not require an EC2 SSH key pair. The local Session Manager plugin is required for AWS CLI interactive sessions.
-
-### Install and verify the plugin (macOS)**
-
-```bash
-
-brew install --cask session-manager-plugin
-
-session-manager-plugin
-
-```
-
-If the Homebrew cask is unavailable, follow the [AWS macOS installation guide](https\://docs.aws.amazon.com/systems-manager/latest/userguide/install-plugin-macos-overview\.html).
-
-### Open a session**
-
-```bash
-
 aws ssm start-session \
-
-  \--target i-0f80e33afb9d7dd0a \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app
-
+  --target i-0f80e33afb9d7dd0a \
+  --region us-east-1 \
+  --profile recipe-app
 ```
 
-Inside the instance, check the Docker installation and bootstrap status:
+## 5. ECR and Django container
 
-```bash
+**Image:**
 
-docker --version
-
-sudo systemctl is-active docker
-
-cat /opt/recipe-app/setup-status.txt
-
+```text
+362176666546.dkr.ecr.us-east-1.amazonaws.com/recipe-app-backend:midpoint-v1
 ```
 
-Expected bootstrap message: `EC2 Docker setup completed`. **These checks are pending confirmation.**
+- Built for `linux/amd64` and pushed to ECR.
+- Gunicorn serves Django on `0.0.0.0:8000` **inside the container**.
+- Docker publishes it only on the EC2 loopback interface: `127.0.0.1:8000:8000`.
+- Container name: `recipe-app-backend`.
+- Restart policy: `unless-stopped`.
+- Temporary SQLite database persists in `/opt/recipe-app/data/db.sqlite3` on the EC2 host and is bind-mounted to `/app/db.sqlite3` inside the container.
+- Runtime environment file: `/opt/recipe-app/backend.env`, permissions `600`; contains a Django secret and settings. **Never commit or paste its contents.**
+- Django migrations were applied to the mounted SQLite database.
 
-### Pull the backend image on EC2 (next step)**
-
-The following commands run **inside EC2**, where the instance role provides ECR permissions. Do not use the local SSO profile on EC2.
+### Current run configuration (for reference)
 
 ```bash
-
-aws ecr get-login-password --region us-east-1 \
-
-  | sudo docker login \
-
-      \--username AWS \
-
-      \--password-stdin \
-
-      362176666546.dkr.ecr.us-east-1.amazonaws.com
-
-sudo docker pull \
-
+sudo docker run -d \
+  --name recipe-app-backend \
+  --restart unless-stopped \
+  --env-file /opt/recipe-app/backend.env \
+  -p 127.0.0.1:8000:8000 \
+  -v /opt/recipe-app/data/db.sqlite3:/app/db.sqlite3 \
   362176666546.dkr.ecr.us-east-1.amazonaws.com/recipe-app-backend:midpoint-v1
-
 ```
 
-**Not yet complete:** persistent SQLite configuration, secure runtime secrets, database migrations, container startup, and remote API testing. The current Docker image's default database storage should not be assumed persistent across container replacement.
+> This command documents the existing container setup. Do not run it again while a container with that name already exists. Do not remove the host database file during updates.
 
-## 7. React frontend hosting (S3 + CloudFront)
-
-**Template:** `infrastructure/cloudformation/frontend.yaml`  
-**Stack:** `recipe-app-frontend`  
-**Region for stack and S3:** `us-east-1` (CloudFront distribution is global)
-
-The frontend is a Vite-built React single-page application. Its static build files are stored in a private S3 bucket and delivered over HTTPS by CloudFront. CloudFront Origin Access Control (OAC) grants the distribution read access to the bucket; public S3 bucket access remains blocked.
-
-### Deployed resources
-
-| Resource | Value |
-| --- | --- |
-| S3 bucket | `recipe-app-frontend-frontendbucket-yhbrd6afosjk` |
-| CloudFront distribution ID | `E2YMECNRA0V5YR` |
-| Frontend URL | https://d1q0iv2raorz8j.cloudfront.net |
-
-These values reflect the October 14, 2026 deployment. Use stack outputs rather than assuming they remain unchanged after resource replacement.
-
-### Validate and deploy the frontend infrastructure
-
-From the repository root:
+### Verified commands on EC2
 
 ```bash
-aws cloudformation validate-template \
-  --template-body file://infrastructure/cloudformation/frontend.yaml \
-  --region us-east-1 \
-  --profile recipe-app
-
-aws cloudformation deploy \
-  --template-file infrastructure/cloudformation/frontend.yaml \
-  --stack-name recipe-app-frontend \
-  --region us-east-1 \
-  --profile recipe-app
+sudo docker ps -a
+sudo docker inspect recipe-app-backend \
+  --format 'Status: {{.State.Status}} Restart: {{.HostConfig.RestartPolicy.Name}} Ports: {{json .HostConfig.PortBindings}}'
+curl -i http://127.0.0.1:8000/api/ingredients/
 ```
 
-Retrieve current stack outputs:
+Observed: container `running`, restart policy `unless-stopped`, host port bound to `127.0.0.1:8000`, and ingredient API returned **HTTP 200**. This is **not** evidence that the API is reachable from the internet.
 
-```bash
-aws cloudformation describe-stacks \
-  --stack-name recipe-app-frontend \
-  --region us-east-1 \
-  --profile recipe-app \
-  --query 'Stacks[0].Outputs' \
-  --output table
-```
+## 6. Frontend: S3 + CloudFront
 
-**Verified:** CloudFormation deployment completed successfully on October 14, 2026.
+- **Stack:** `recipe-app-frontend`
+- **S3 bucket:** `recipe-app-frontend-frontendbucket-yhbrd6afosjk`
+- **CloudFront distribution:** `E2YMECNRA0V5YR`
+- **URL:** https://d1q0iv2raorz8j.cloudfront.net
+- **S3 access:** bucket is private; CloudFront Origin Access Control (OAC) and bucket policy permit delivery through the distribution.
+- **SPA behavior:** 403/404 fallback to `index.html`.
+- **Viewer protocol:** redirect HTTP to HTTPS.
 
-### Build and publish frontend code
+React/Vite build passed (`npm run build`), and the `frontend/dist/` files were synced to S3. A CloudFront invalidation was created. `curl -I` to the distribution returned **HTTP 200**. Browser-level functionality and API integration were not independently verified.
 
-Infrastructure deployment and application deployment are separate operations. Updating React source files alone does not update the hosted site or require redeploying the CloudFormation stack.
+### Manual frontend release procedure
 
 From the repository root:
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run build
 cd ..
-
 aws s3 sync frontend/dist/ \
   s3://recipe-app-frontend-frontendbucket-yhbrd6afosjk/ \
-  --delete \
-  --region us-east-1 \
-  --profile recipe-app
-
+  --delete --region us-east-1 --profile recipe-app
 aws cloudfront create-invalidation \
   --distribution-id E2YMECNRA0V5YR \
   --paths '/*' \
   --profile recipe-app
 ```
 
-`--delete` removes objects no longer present in the build directory; use it only for this dedicated frontend bucket. Invalidation refreshes cached content after deployment. CloudFront can take time to propagate changes.
+The frontend deployment is currently **manual**. Updating GitHub code or rerunning an unchanged CloudFormation template does **not** automatically build or deploy new application code.
 
-### Verify public delivery
+## 7. CloudFormation deployment safety
+
+The stacks are independent deployment units but share exported values:
+
+1. `recipe-app-network` provides VPC/subnet exports.
+2. `recipe-app-ecr` provides ECR exports.
+3. `recipe-app-backend` imports network and ECR values.
+4. `recipe-app-frontend` serves static assets independently.
+
+Validate templates before changes:
 
 ```bash
+aws cloudformation validate-template \
+  --template-body file://infrastructure/cloudformation/backend.yaml \
+  --region us-east-1 --profile recipe-app
+```
+
+**Before updating a live stack:** create and inspect a CloudFormation change set. Pay special attention to any `Replacement: True` or conditional replacement on `BackendInstance`, VPC, or subnets. The backend AMI parameter resolves to a *latest* Amazon Linux image, so an update could select a different AMI and replace the instance. The host SQLite file resides on a root volume configured for deletion upon instance termination; **back up data before any instance replacement**.
+
+CloudFormation manages infrastructure, **not automatically the currently running Docker container or the React build artifacts**. A failed infrastructure update can affect live resources depending on what was changed and whether rollback succeeds; do not assume all updates are harmless.
+
+## 8. Midpoint deployment decisions and outstanding work
+
+**Decision (October 14):** Use the existing Internet Gateway and public-subnet EC2 for the midpoint API connection, instead of immediately adding private subnets, NAT, ALB, or API Gateway. Route `/api/*` through the existing CloudFront distribution to an EC2 custom origin. This is a **planned implementation**, not a completed deployment.
+
+Before enabling the API route:
+
+1. Establish stable EC2 origin addressing (DNS and/or Elastic IP) and plan certificate handling.
+2. Configure an origin-facing reverse proxy/HTTPS listener; do not expose Django development services broadly.
+3. Update Docker networking so the reverse proxy can reach Gunicorn while maintaining minimal exposure.
+4. Add narrowly scoped inbound security-group rules, preferably restricted to CloudFront origin-facing IP ranges or an appropriate managed prefix list. Validate port and origin reachability.
+5. Add a CloudFront custom origin and `/api/*` behavior; forward required methods, headers, query strings, cookies, and authentication data deliberately. Do not cache personalized API responses indiscriminately.
+6. Update Django `ALLOWED_HOSTS`, proxy settings, CORS/CSRF settings where applicable, and React API base URL.
+7. Test requests end-to-end from a browser, not only with localhost `curl`.
+
+**Remaining after midpoint:** verify Cognito integration; add RDS or another appropriate production database; implement GitHub OIDC-backed CI/CD; evaluate ALB/Auto Scaling and quantify scalability using tests and metrics. Current single-instance deployment is not horizontally scalable and has a single point of failure.
+
+## 9. Security and operational notes
+
+- Do not commit `/opt/recipe-app/backend.env`, Django secrets, AWS credentials, or SQLite data.
+- Use SSM instead of opening port 22.
+- Preserve the private S3 bucket and CloudFront OAC.
+- Keep origin security restrictive; CloudFront HTTPS for viewers does not imply encryption on the CloudFront-to-EC2 hop.
+- ECR `midpoint-v1` is immutable; publish a **new tag** for a changed image rather than overwriting it.
+- Maintain backups before CloudFormation operations that might replace EC2 or delete EBS storage.
+- AWS resources may incur ongoing charges even when lightly used. Review EC2, CloudFront, EBS, and any newly introduced resources.
+
+## 10. Quick verification commands
+
+```bash
+# Stack states
+aws cloudformation describe-stacks \
+  --stack-name recipe-app-backend \
+  --region us-east-1 --profile recipe-app \
+  --query 'Stacks[0].StackStatus' --output text
+
+# Security group rules
+aws ec2 describe-security-group-rules \
+  --filters Name=group-id,Values=sg-0924c0659e225b906 \
+  --region us-east-1 --profile recipe-app
+
+# Frontend HTTP headers
 curl -I https://d1q0iv2raorz8j.cloudfront.net
+
+# Backend API (run INSIDE the EC2 SSM session)
+curl -i http://127.0.0.1:8000/api/ingredients/
 ```
 
-**Observed October 14, 2026:** `HTTP/1.1 200 OK`, `Content-Type: text/html`, `Server: AmazonS3`, and `X-Cache: Miss from cloudfront`. This confirms CloudFront successfully delivered the HTML from S3 over HTTPS; it does not independently verify JavaScript execution, client-side routing, or backend connectivity.
-
-**Remaining browser checks:** Confirm that the app renders, styles/assets load, navigation works, and refreshing a nested React route works. The CloudFormation template's 403/404 fallback to `index.html` supports SPA routes but can also return HTML for missing static assets; refine error handling if necessary.
-
-**Integration limitation:** The Django API is not publicly reachable yet. Production API base URL, HTTPS backend access, and CORS must be configured and verified before calling the frontend/backend integration complete.
-
-## 8. Updating infrastructure**
-
-1\. Edit the appropriate CloudFormation template.
-
-2\. Validate the template.
-
-3\. Review the proposed changes (use CloudFormation change sets for important updates).
-
-4\. Deploy the stack.
-
-5\. Verify stack outputs and resource health.
-
-6\. Update this README and architecture documentation.
-
-Avoid manual changes to CloudFormation-managed resources because they can cause configuration drift.
-
-### Troubleshooting failed stack creation**
-
-A stack in `ROLLBACK_COMPLETE` cannot be updated. Inspect the failure **before** deleting it:
-
-```bash
-
-aws cloudformation describe-stack-events \
-
-  \--stack-name recipe-app-backend \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app \
-
-  \--query "StackEvents[?ResourceStatus=='CREATE_FAILED'].[Timestamp,LogicalResourceId,ResourceStatusReason]" \
-
-  \--output table
-
-```
-
-During the initial backend deployment, `t3.micro` was unavailable in the original subnet's Availability Zone (`us-east-1e`). A second subnet in `us-east-1a` resolved this issue.
-
-## 9. Planned improvements**
-
-\- Run the Django/Gunicorn container from ECR on EC2 with persistent storage and environment-based secrets.
-
-\- Expose the API through a controlled HTTPS endpoint; do not expose Django administration or SSH unnecessarily.
-
-\- Replace temporary SQLite storage with a managed database such as Amazon RDS.
-
-\- Verify browser rendering and SPA navigation on the deployed CloudFront frontend, then connect it to the public HTTPS backend API.
-
-\- Add automated builds and deployments (CI/CD).
-
-\- Evaluate private subnets, load balancing, Auto Scaling, multiple EC2 instances, and CloudWatch alarms for security, resilience, and scalability.
-
-An architecture diagram documenting VPC CIDRs, subnets, routing, EC2 placement, security boundaries, and future database connectivity is planned.
-
-## 10. Security and cost notes**
-
-\- Use IAM Identity Center and short-lived credentials for developer access.
-
-\- Never commit AWS keys, Django secret keys, or other secrets.
-
-\- Keep ECR pull permissions scoped to the backend repository.
-
-\- Keep inbound security group access closed until a deliberate API exposure design is in place.
-
-\- Prefer Session Manager over public SSH access.
-
-\- EC2, EBS, public IPv4 addresses, ECR and S3 storage, CloudFront requests/data transfer, and invalidations beyond free allowances may incur AWS charges.
-
-\- Use the deployed CloudFormation outputs as the source of truth for instance IDs and addresses.
-
-## 11. Cleanup (destructive)**
-
-> **Warning:** Stack deletion can remove infrastructure and application data. Back up data and confirm team approval before cleanup. Do not run these commands against active resources.
-
-The frontend S3 bucket must be emptied before CloudFormation can delete it; its CloudFront distribution may also require time to disable and delete. The backend stack imports resources from the network and ECR stacks. Delete dependent stacks **before** deleting the network or registry stacks. An ECR repository containing images may block stack deletion unless images are removed first; the template intentionally sets `EmptyOnDelete: false`.
-
-```bash
-
-# Delete the backend stack first.
-
-aws cloudformation delete-stack \
-
-  \--stack-name recipe-app-backend \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app
-
-aws cloudformation wait stack-delete-complete \
-
-  \--stack-name recipe-app-backend \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app
-
-# Only after dependent resources are removed:
-
-aws cloudformation delete-stack \
-
-  \--stack-name recipe-app-network \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app
-
-aws cloudformation wait stack-delete-complete \
-
-  \--stack-name recipe-app-network \
-
-  \--region us-east-1 \
-
-  \--profile recipe-app
-
-```
-
-The ECR stack requires separate cleanup after its images and cross-stack dependencies have been handled. No cleanup is necessary during active development.
+**Next infrastructure task:** connect CloudFront `/api/*` to a secured EC2 origin using the existing Internet Gateway, then verify the full frontend-to-backend request path.
