@@ -186,7 +186,8 @@ class ParseRecipeFiltersTests(RecipeFilterTestData):
     def test_unknown_allergy_is_rejected_not_ignored(self, _available):
         self.assert_invalid("allergy=peanutt", "allergy")
 
-    def test_allergy_filters_rejected_until_ingredients_have_allergens(self):
+    @patch("apps.recipes.filters.allergen_filtering_available", return_value=False)
+    def test_allergy_filters_rejected_while_ingredients_lack_allergens(self, _available):
         for query, field in (("allergy=peanut", "allergy"), (f"allergen={self.peanut.id}", "allergen")):
             messages = self.assert_invalid(query, field)
             self.assertEqual([str(m) for m in messages], [ALLERGEN_FILTERING_UNAVAILABLE])
