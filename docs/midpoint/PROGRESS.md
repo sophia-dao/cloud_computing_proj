@@ -24,7 +24,7 @@ At midpoint, the project has working frontend hosting, a deployed Django API, te
 
 ### 2.1 Original architecture and service choices
 
-The original design, described in `README.md`, `docs/system-design.md`, and `docs/aws-architecture.md`, uses a **client-server architecture with a modular-monolith Django backend**, rather than microservices. The planned stack includes React, Django REST Framework, EC2, Docker, ECR, S3/CloudFront, RDS PostgreSQL, Cognito, and AWS security/monitoring services.
+The original plan, which was documented in [`README.md`](README.md), [`aws-architecture.md`](docs/aws-architecture.md) and [`system-design.md`](docs/system-design.md), uses a **client-server architecture with a modular-monolith Django backend**, rather than microservices. The planned stack includes React, Django REST Framework, EC2, Docker, ECR, S3/CloudFront, RDS PostgreSQL, Cognito, and AWS security/monitoring services.
 
 | Component | Original design | Midpoint status |
 |---|---|---|
@@ -40,106 +40,306 @@ The original design, described in `README.md`, `docs/system-design.md`, and `doc
 
 The original design intentionally started with one backend instance. Application Load Balancing, Auto Scaling, and multi-instance availability remain potential future improvements rather than completed capabilities.
 
-### 2.2 Architectural rationale and trade-offs
+### 2.2 Architectural Rationale
 
-- **Modular monolith:** Django modules separate Users, Ingredients, Recipes, Inventory, Recommendations, Reviews, and Shopping while sharing one application deployment and a canonical `Ingredient` model. This reduces operational complexity but means backend modules initially scale together.
+The Recipe Suggestion App uses a modular backend architecture with containerized deployment and separate frontend hosting. The design prioritizes maintainability, team collaboration, reproducible deployments, and manageable AWS infrastructure costs during development.
 
-- **EC2 with Docker and ECR:** EC2 provides control over host networking and application deployment; Docker makes the runtime reproducible; ECR stores deployable images. The team must manage instance health, configuration, and releases.
+#### 2.2.1 Modular Monolith — Django Backend
 
-- **S3 and CloudFront:** Static React assets are served separately from Django, while CloudFront offers one HTTPS entry point for frontend and API paths. Origin routing and SPA error behavior require explicit configuration.
+The Django backend is organized into separate functional apps, including Users, Ingredients, Recipes, Inventory, and Recommendations. This allows team members to develop most features independently and in parallel while sharing a single backend deployment.
 
-- **RDS PostgreSQL:** The intended durable relational database is separate from disposable application containers. It is deferred to a later phase; SQLite is a temporary midpoint choice.
+**Key benefits:**
+- Clear separation of application responsibilities.
+- Easier collaboration, testing, and maintenance.
+- Shared data models and interfaces across related apps.
+- Lower deployment and operational complexity compared with microservices.
 
-- **Cognito with Django authorization:** Cognito is intended to handle sign-in and identity, while Django will enforce resource ownership and role permissions. This integration is not yet implemented.
+#### 2.2.2 Containerized Backend — EC2, Docker, and ECR
 
-- **Availability planning:** The VPC has a public subnet for the deployed backend and a main route table for default VPC routing. The current application runs on one EC2 instance; automatic failover and horizontal scaling are future improvements.
+The Django backend runs inside a Docker container hosted on Amazon EC2. Docker packages the application and its dependencies into a consistent runtime environment, while Amazon Elastic Container Registry (ECR) stores versioned container images.
 
-### 2.3 Implementation refinements introduced by midpoint
+**Deployment workflow:**
 
-| Area | Refinement | Reason and trade-off |
-|---|---|---|
-| Infrastructure provisioning | CloudFormation stacks for network, ECR, backend, and frontend | Version-controlled, reviewable changes; added template/debugging effort |
-| VPC routing design | Public subnet with an Internet Gateway route and a separate main route table | Supports the deployed backend network and leaves room for future availability enhancements |
-| EC2 administration | Systems Manager Session Manager | Verified access without inbound SSH |
-| Application serving | Gunicorn in Docker; Nginx on EC2 | Runs Django behind a reverse proxy; requires correct host and proxy configuration |
-| Public application entry | CloudFront routes frontend requests to S3 and `/api/*` to EC2 | One public HTTPS domain; origin HTTP remains a security limitation |
-| SPA routing | CloudFront Function rewrites extensionless frontend paths to `/index.html` | Preserves React client-side navigation without masking backend 403/404 errors |
-| Database rollout | SQLite file persisted on EC2 host | Supports midpoint API deployment; lacks managed database availability and scaling |
-| Deployment automation | Backend and frontend deployment currently performed manually | Automated GitHub Actions tests and deployment are planned for the final phase |
+1. Build a Docker image from the Django backend source code.
+2. Push the image to Amazon ECR.
+3. Pull the image from ECR onto the EC2 instance.
+4. Run the image as a Docker container to serve backend API requests.
+5. For application updates, build and deploy a new image to replace the previous container.
 
-### 2.4 Current deployed architecture
+This approach simplifies backend releases and provides control over the application environment. The team remains responsible for EC2 configuration, instance health, security, and deployment management.
 
-```mermaid
+#### 2.2.3 Frontend Hosting and Request Routing — S3 and CloudFront
 
-flowchart TB
+The React frontend is compiled into static production files (HTML, CSS, and JavaScript) and hosted in a private Amazon S3 bucket. Amazon CloudFront securely accesses these files through Origin Access Control (OAC) and serves as the application's public HTTPS entry point.
 
-    U[User / Browser] -->|HTTPS| CF[Amazon CloudFront]
+**Request routing:**
 
-    CF -->|Default behavior: viewer-request SPA rewrite| FN[CloudFront Function]
+- **Frontend requests:** CloudFront retrieves and caches static React assets from S3.
+- **API requests (`/api/*`):** CloudFront forwards requests to the Django backend on EC2.
+- **Client-side navigation:** SPA fallback configuration allows React routes to load correctly when accessed directly or refreshed.
 
-    FN --> S3[(Private S3 bucket: React build)]
+This architecture separates static frontend hosting from backend processing, improves content delivery through caching, and provides a unified application entry point.
 
-    CF -->|/api/* behavior: HTTP to origin| NG[Nginx on EC2 :80]
+**Current Security Consideration — HTTPS Between CloudFront and EC2**
 
-    NG -->|127.0.0.1:8000| DK[Docker / Gunicorn / Django REST API]
+Currently, CloudFront provides HTTPS encryption for communication between users' browsers and the application. However, requests forwarded from CloudFront to the EC2 backend use HTTP.
 
-    DK --> SQL[(SQLite file on EC2 host)]
+This configuration was chosen to simplify the initial deployment and avoid the additional domain, TLS certificate, and reverse proxy configuration required for HTTPS on the backend. It allows the team to prioritize establishing and testing the complete frontend-to-backend communication workflow during the midpoint phase.
 
-    ECR[(Amazon ECR)] -.->|Manually deployed image| DK
+**Planned improvement:** The backend will be configured with a valid TLS certificate and an HTTPS endpoint, potentially using an Application Load Balancer (ALB) with AWS Certificate Manager (ACM). CloudFront will then be configured to communicate with the backend origin over HTTPS, providing encryption across both connections.
 
-    SSM[AWS Systems Manager] -.->|Administration without SSH| NG
+This improvement will protect API traffic in transit between CloudFront and the backend, including authentication tokens and user data.
 
-    CFN[CloudFormation] -.->|Provision and update| CF
+#### 2.2.4 Planned Improvements
 
-    CFN -.->|Provision and update| NG
+The following components are planned for later development phases and are not part of the current midpoint implementation.
 
-```
-
-**Figure 1. Midpoint deployed request path. Solid arrows show the deployed request flow; dashed arrows indicate provisioning, administration, or image-delivery relationships. CloudFront-to-EC2 uses HTTP, not HTTPS.**
-
-**Deployed infrastructure details:**
-
-| Resource | Identifier / configuration |
+| Component | Planned Purpose |
 |---|---|
-| Region | `us-east-1` |
-| Frontend CloudFormation stack | `recipe-app-frontend` |
-| CloudFront distribution | `E2YMECNRA0V5YR` |
-| Public application URL | `https://d1q0iv2raorz8j.cloudfront.net` |
-| Private frontend bucket | `recipe-app-frontend-frontendbucket-yhbrd6afosjk` |
-| Backend instance | `i-0f80e33afb9d7dd0a` (`t3.micro`) |
-| Backend Elastic IP | `3.214.51.24` |
-| Backend origin DNS | `ec2-3-214-51-24.compute-1.amazonaws.com` |
-| Backend ECR image | `recipe-app-backend:midpoint-v1` |
-| CloudFront API path behavior | `/api/*` to EC2/Nginx |
-| CloudFront SPA behavior | Viewer-request function on default S3 behavior |
+| **Amazon RDS PostgreSQL** | Replace temporary SQLite storage with a managed relational database for persistent application data, backups, and improved reliability. |
+| **Amazon Cognito** | Provide user registration, sign-in, and token-based authentication, while Django enforces application-level permissions and resource ownership. |
+| **High Availability and Auto Scaling** | Introduce an Application Load Balancer and EC2 Auto Scaling across multiple Availability Zones to improve fault tolerance and handle increasing traffic. |
 
-The VPC (`10.0.0.0/16`) includes the backend public subnet in `us-east-1a` (`10.0.2.0/24`), associated with a public route table that routes internet-bound traffic through an Internet Gateway. A separate main route table retains local VPC routing and provides a foundation for future network expansion. The current backend uses one EC2 instance, and the container exposes Gunicorn only through `127.0.0.1:8000`. Nginx receives origin requests on port 80 and proxies them to Django.
+The current deployment uses a single EC2 backend instance, prioritizing a functional and manageable infrastructure before introducing additional scaling and availability mechanisms.
 
-### 2.5 Application architecture and intended recommendation flow
+### 2.3 Implementation Refinements Introduced by Midpoint
 
-The backend uses domain-oriented Django modules and a shared canonical `Ingredient` model. Guest ingredient selections and registered-user inventory are intended to feed the same `RecommendationService`, with preference/allergen filtering and the two recommendation modes.
+During the midpoint phase, several implementation decisions were introduced to improve deployment consistency, security, maintainability, and application accessibility. These refinements support the architecture described in Section 2.2 while keeping the infrastructure manageable for the current development stage.
+
+| Area | Implementation Refinement | Rationale and Trade-off |
+|---|---|---|
+| **Infrastructure as Code** | Separate AWS CloudFormation stacks for networking, ECR, backend, and frontend resources. | Enables repeatable, version-controlled infrastructure deployments and easier resource management. However, changes require template validation and troubleshooting. |
+| **Network Configuration** | VPC with public subnets, an Internet Gateway, and route tables controlling network traffic. | Provides network connectivity for the current EC2 deployment while supporting future infrastructure expansion. High availability is not yet implemented. |
+| **Secure EC2 Administration** | AWS Systems Manager Session Manager for remote instance access. | Allows administrators to manage EC2 without opening inbound SSH port 22, reducing unnecessary network exposure. Requires appropriate IAM permissions and Systems Manager connectivity. |
+| **Backend Application Serving** | Gunicorn runs Django inside Docker, with Nginx on EC2 acting as a reverse proxy. | Separates HTTP request handling from Django application execution and supports a production-oriented serving configuration. Requires proper proxy, host, and security settings. |
+| **Unified Application Entry Point** | CloudFront routes frontend requests to S3 and `/api/*` requests to EC2. | Provides a single public HTTPS domain and separates static content delivery from backend processing. The CloudFront-to-EC2 connection currently uses HTTP, with HTTPS planned for a later phase. |
+| **React Client-Side Routing** | A CloudFront Function rewrites extensionless frontend navigation paths to `/index.html`, excluding API routes. | Allows direct navigation and page refreshes in the React SPA without incorrectly converting backend API errors into frontend pages. |
+| **Temporary Database Persistence** | SQLite database stored persistently on the EC2 host outside the replaceable Docker container. | Preserves application data across container replacements and simplifies midpoint deployment. However, SQLite lacks the managed availability, backup, and scaling capabilities planned with Amazon RDS PostgreSQL. |
+| **Deployment Process** | Backend and frontend builds and deployments are currently performed manually. | Provides direct control and simplifies troubleshooting during initial infrastructure setup. Automated testing and deployment through GitHub Actions are planned for the final phase. |
+
+These refinements establish a functional deployment foundation while identifying clear opportunities for improving security, automation, and scalability in the final implementation.
+
+### 2.4 Current Deployed Architecture
+
+The midpoint deployment consists of a React frontend hosted on Amazon S3 and delivered through CloudFront, with a containerized Django backend running on a single EC2 instance. CloudFront serves as the public application entry point and routes requests to the appropriate origin.
+
+#### 2.4.1 Deployed Architecture Diagram
 
 ```mermaid
+flowchart TB
+    U["User / Browser"]
 
-flowchart LR
+    subgraph AWS["AWS Cloud Infrastructure"]
+        CF["Amazon CloudFront<br/>HTTPS Entry Point"]
+        FN["CloudFront Function<br/>SPA Route Rewrite"]
+        S3[("Private S3 Bucket<br/>React Production Build")]
 
-    G[Guest ingredient selection: planned UI flow] --> ID[Canonical Ingredient IDs]
+        subgraph VPC["Amazon VPC"]
+            subgraph PUB["Public Subnet — us-east-1a"]
+                NG["Nginx on EC2<br/>Port 80"]
+                DK["Docker Container<br/>Gunicorn + Django REST API"]
+                SQL[("SQLite Database<br/>Persistent EC2 Host Storage")]
+            end
+        end
 
-    R[Registered user inventory: planned persistence] --> ID
+        ECR[("Amazon ECR<br/>Backend Container Image")]
+        SSM["AWS Systems Manager<br/>Session Manager"]
+        CFN["AWS CloudFormation<br/>Infrastructure Provisioning"]
+    end
 
-    ID --> RS[RecommendationService: planned integration]
+    U -->|"HTTPS"| CF
+    CF -->|"Default behavior"| FN
+    FN -->|"S3 origin request"| S3
+    CF -->|"/api/* — HTTP"| NG
+    NG -->|"127.0.0.1:8000"| DK
+    DK -->|"Persistent storage"| SQL
 
-    F[Tags / Allergens / Match mode] --> RS
+    ECR -.->|"Manual image deployment"| DK
+    SSM -.->|"Remote administration"| NG
+    CFN -.->|"Provision / update"| CF
+    CFN -.->|"Provision / update"| NG
+    CFN -.->|"Provision / update"| ECR
 
-    RS --> OUT[Recipe matches / missing ingredients]
-
-    OUT --> SHOP[Shopping list: planned]
-
+    style AWS fill:none,stroke:#64748b,stroke-dasharray:5 5
+    style VPC fill:none,stroke:#64748b
+    style PUB fill:none,stroke:#94a3b8
 ```
 
-**Figure 2. Intended recommendation data flow. The canonical Ingredient API foundation is implemented; this diagram does not claim that the full recommendation workflow is operational.**
+**Figure 1. Midpoint Deployed Architecture.** Solid arrows represent application request and data flows, while dashed arrows represent deployment, administration, and infrastructure management relationships. HTTPS is used between the browser and CloudFront; the current CloudFront-to-EC2 origin connection uses HTTP.
 
-### 2.6 Planned automated deployment workflow
+#### 2.4.2 Deployed AWS Resources
+
+| Resource | Identifier / Configuration |
+|---|---|
+| **AWS Region** | `us-east-1` (N. Virginia) |
+| Frontend CloudFormation Stack | `recipe-app-frontend` |
+| CloudFront Distribution | `E2YMECNRA0V5YR` |
+| Public Application URL | https://d1q0iv2raorz8j.cloudfront.net |
+| Private Frontend S3 Bucket | `recipe-app-frontend-frontendbucket-yhbrd6afosjk` |
+| Backend EC2 Instance | `i-0f80e33afb9d7dd0a` |
+| EC2 Instance Type | `t3.micro` |
+| Backend Elastic IP | `3.214.51.24` |
+| Backend Origin DNS | `ec2-3-214-51-24.compute-1.amazonaws.com` |
+| Backend ECR Image | `recipe-app-backend:midpoint-v1` |
+| CloudFront API Behavior | `/api/*` forwarded to EC2 |
+| CloudFront SPA Behavior | Viewer-request function on default S3 behavior |
+
+#### 2.4.3 Network and Backend Configuration
+
+The deployed backend operates within an Amazon VPC using the `10.0.0.0/16` CIDR range.
+
+| Network Component | Current Configuration |
+|---|---|
+| VPC CIDR | `10.0.0.0/16` |
+| Backend Public Subnet | `10.0.2.0/24` |
+| Availability Zone | `us-east-1a` |
+| Public Route Table | Routes internet-bound traffic through an Internet Gateway |
+| Main Route Table | Local VPC routing |
+| EC2 Web Server | Nginx listening on port `80` |
+| Django Application Server | Gunicorn bound to `127.0.0.1:8000` on the EC2 host |
+| Database | SQLite persisted on the EC2 host |
+| Remote Administration | AWS Systems Manager Session Manager |
+
+Nginx receives incoming API requests on port 80 and forwards them to Gunicorn through the local loopback interface. This keeps Gunicorn from being directly exposed to external network traffic.
+
+The VPC also provides a foundation for future expansion across multiple Availability Zones. However, the current backend operates on a single EC2 instance without automatic failover or horizontal scaling.
+
+### 2.5 Backend Application Structure
+
+The Django backend follows a modular monolith architecture, organizing application functionality into separate domain-oriented Django apps. Each app is responsible for a specific part of the system while sharing the same Django project, database configuration, and deployment environment.
+
+The backend is organized around the following functional areas:
+
+| Django App | Responsibility |
+|---|---|
+| **Users** | User profiles, preferences, allergies, and application-level permissions |
+| **Ingredients** | Centralized ingredient catalog and canonical ingredient identifiers |
+| **Recipes** | Recipe information, ingredients, instructions, and search/filter functionality |
+| **Inventory** | Management of ingredients available to registered users |
+| **Recommendations** | Recipe matching based on available ingredients, preferences, and dietary restrictions |
+| **Reviews** | User ratings and reviews of recipes |
+| **Shopping** | Shopping lists and missing ingredient management |
+
+#### Backend Module Relationships
+
+```mermaid
+flowchart TB
+    API["Django REST API<br/>Shared Backend Application"]
+
+    subgraph Apps["Functional Django Apps"]
+        direction TB
+        U["Users"]
+        I["Ingredients"]
+        R["Recipes"]
+        INV["Inventory"]
+        REC["Recommendations"]
+        REV["Reviews"]
+        SHOP["Shopping"]
+    end
+
+    DB[("Shared Application Database")]
+
+    API --> U
+    API --> I
+    API --> R
+    API --> INV
+    API --> REC
+    API --> REV
+    API --> SHOP
+
+    U --- INV
+    U --- REV
+    I --- R
+    I --- INV
+    R --- REC
+    INV --- REC
+    R --- REV
+    REC --- SHOP
+
+    Apps --> DB
+```
+
+**Figure 2. Logical Django Backend Structure.** The diagram illustrates the functional separation of Django apps and their primary relationships. All apps operate within the same backend application and share database infrastructure. Connections represent logical dependencies rather than independently deployed services.
+
+#### Shared Data and Module Integration
+
+Although the backend is divided into functional apps, related modules communicate through shared Django models and application-level interfaces.
+
+A key design decision is the use of a **canonical `Ingredient` model**, which provides consistent ingredient identifiers across Recipes, Inventory, Recommendations, and Shopping. This prevents duplicate representations of the same ingredient and simplifies integration between modules.
+
+The modular structure also supports parallel development. Team members can implement and test separate Django apps independently, with integration occurring as shared models and interfaces become available.
+
+This design provides the maintainability benefits of modular development without the additional deployment and communication complexity of a microservices architecture.
+
+### 2.6 Frontend Application Structure
+
+The React frontend follows a component-based, feature-oriented architecture. Application functionality is organized into separate feature modules, while reusable UI components, shared layouts, and API utilities provide consistency across the application.
+
+This structure supports parallel frontend development, code reusability, and maintainability as new features are integrated.
+
+#### Frontend Organization
+
+| Area | Responsibility |
+|---|---|
+| **App and Routing** | Application initialization, route definitions, and page navigation using React Router |
+| **Pages** | Page-level views such as Home, Recipe Details, Dashboard, Profile, and Not Found |
+| **Features** | Feature-specific components and logic for Ingredients, Recipes, Recommendations, Inventory, and User Profiles |
+| **Common Components** | Reusable interface elements such as buttons, inputs, cards, and loading indicators |
+| **Layout Components** | Shared page structures such as navigation bars, headers, and footers |
+| **API Services** | Centralized communication with Django REST API endpoints |
+| **Styles and Theme** | Shared design tokens, colors, typography, and responsive styling |
+
+#### Frontend Component Structure
+
+```mermaid
+flowchart TB
+    APP["React Application"]
+
+    ROUTER["React Router<br/>Page Navigation"]
+    LAYOUT["Shared Layout<br/>Navbar / Footer"]
+
+    subgraph PAGES["Page-Level Views"]
+        HOME["Home"]
+        RECIPES["Recipe Pages"]
+        DASH["Dashboard"]
+        PROFILE["Profile"]
+        NOTFOUND["Not Found"]
+    end
+
+    subgraph FEATURES["Feature Modules"]
+        ING["Ingredients"]
+        RECS["Recommendations"]
+        INV["Inventory"]
+        USER["User Profile"]
+    end
+
+    COMMON["Reusable UI Components<br/>Buttons / Inputs / Cards"]
+    API["Shared API Client<br/>Feature Services"]
+    BACKEND["Django REST API"]
+
+    APP --> ROUTER
+    ROUTER --> LAYOUT
+    LAYOUT --> PAGES
+
+    PAGES --> FEATURES
+    FEATURES --> COMMON
+    FEATURES --> API
+    API -->|"HTTP Requests via CloudFront"| BACKEND
+```
+
+**Figure 3. Logical React Frontend Structure.** The diagram illustrates how application routing, page-level views, reusable components, and feature modules are organized. Feature services communicate with the Django backend through a shared API client.
+
+#### Component Reusability and API Integration
+
+The frontend separates reusable interface components from feature-specific functionality. Shared components provide consistent styling and behavior across pages, reducing duplicated code and simplifying future UI changes.
+
+API communication is centralized through a shared client and feature-specific service modules. This keeps backend request logic separate from presentation components and provides a consistent approach to handling API responses and errors.
+
+React Router manages navigation between pages without requiring a full page reload. During production deployment, the application is compiled into static assets and served through Amazon S3 and CloudFront, as described in Section 2.2.
+
+Overall, the frontend architecture supports independent feature development while maintaining a consistent user interface and a clear separation between presentation logic and backend communication.
+
+### 2.7 Planned automated deployment workflow
 
 ```mermaid
 
@@ -159,258 +359,304 @@ flowchart LR
 
 **Figure 3. Proposed CI/CD workflow, not yet implemented or verified. Current application deployments are manual.**
 
-## 3. Implementation progress
+## 3. Implementation Progress
+
+As of October 16, 2026, the team has completed the foundational application development, initial AWS deployment, and team access-control configuration required for the midpoint evaluation.
+
+The current implementation demonstrates a working React frontend, a containerized Django backend, cloud-based request routing, and centralized AWS identity management. Additional application features and deployment automation remain under development for the final evaluation.
 
 ### 3.1 Application Development
 
-As of October 15, 2026, the team has closed **8 GitHub issues** under the MVP / Midpoint Evaluation milestone. These include two backend application tasks, two frontend development tasks, and four infrastructure/deployment tasks.
+The team manages development through GitHub Issues, pull requests, and feature branches. Tasks are distributed across backend, frontend, infrastructure, and security workstreams, allowing team members to develop and test components in parallel.
 
-The completed work establishes the foundation for the Recipe Suggestion App and demonstrates progress from local development to a working AWS-hosted frontend and backend API.
+The completed work includes:
 
-| Issue | Component | Status | Implementation and Verification |
-|---|---|---|---|
-| #1 | Backend: Ingredient Foundation | Completed | Implemented the canonical Ingredient model, case-insensitive ingredient search, detail lookup, and API tests. |
-| #2 | Backend: User Profile & Preferences | Completed, with authentication integration pending | Implemented user/profile and preference functionality. Local checks passed. Amazon Cognito integration remains incomplete. |
-| #3 | Frontend: Application Foundation | Completed | Implemented React routing, shared layouts, application structure, and API service foundation. |
-| #15 | Infrastructure: Dockerize Django Backend | Completed | Containerized Django using Docker and Gunicorn. Verified API responses in a local test container and deployed the backend container to EC2. |
-| #17 | Infrastructure: Configure Amazon ECR | Completed | Configured the Amazon ECR repository and successfully pushed the backend Docker image tagged `midpoint-v1`. |
-| #18 | Infrastructure: Deploy Django Backend to EC2 | Completed | Deployed Django on EC2 using Docker, configured Nginx as a reverse proxy, and verified public API access through CloudFront. |
-| #23 | Infrastructure: Deploy React Frontend with S3 and CloudFront | Completed | Deployed the React production build to private Amazon S3, configured CloudFront with Origin Access Control, and verified HTTPS frontend delivery. |
-| #34 | Frontend: Reusable UI Design System and Layout Template | Completed | Implemented reusable frontend components, layouts, and a consistent design foundation. |
+- **Backend foundation:** Django project structure, canonical Ingredient model and API, user profiles, preferences, and initial automated tests.
+- **Frontend foundation:** React Router, shared layouts, reusable UI components, consistent styling, and centralized API services.
+- **Infrastructure integration:** Dockerized Django backend, Amazon ECR image repository, EC2 deployment, and React hosting through S3 and CloudFront.
+- **Security and access management:** AWS IAM Identity Center configuration, team permission sets, and AWS SSO-based access.
 
-**Additional security work:** Issue #40, **Security: Configure AWS IAM Identity Center and Team Access Control**, is partially completed. Its initial configuration and administrative access have been verified, but individual team onboarding and final permission testing remain pending.
+**Figure 4. GitHub Midpoint Milestone Progress**
 
-Although the infrastructure and foundational application tasks are complete, the full Recipe Suggestion App is still under development. Recipe recommendations, inventory management, Cognito integration, and complete end-to-end user workflows remain priorities for the final evaluation.
+![Figure 4](images/fig4.png)
 
-### 3.2 AWS infrastructure and deployment
+The GitHub milestone provides a consolidated record of completed development tasks and remaining work. Individual issue details, implementation discussions, and verification results are maintained in the project repository.
 
-| Resource / practice | Current status | Verification performed |
-|---|---|---|
-| VPC, Internet Gateway, public subnet, public and main route tables | Deployed | CloudFormation network stack completed and updated |
-| EC2 backend (`t3.micro`) | Deployed | Backend stack and instance verified |
-| Docker on EC2 | Verified | Docker service/version checked through SSM; backend container serving requests |
-| AWS Systems Manager | Verified | Interactive session established without inbound SSH |
-| Amazon ECR | Deployed | `recipe-app-backend:midpoint-v1` image pushed |
-| Dockerized Django / Gunicorn on EC2 | **Deployed and verified** | Public `/api/ingredients/` returns HTTP 200 through CloudFront → Nginx → Django |
-| Nginx reverse proxy | **Configured and verified** | Django responses delivered through EC2 origin |
-| Private S3 frontend bucket | Deployed | React build uploaded |
-| CloudFront / Origin Access Control | **Deployed and verified** | HTTPS frontend delivery from private S3 origin |
-| React production build | Verified | Vite build previously compiled 93 modules |
-| CloudFront `/api/*` behavior | **Deployed and verified** | Django API responds through the same public domain |
-| CloudFront SPA rewrite function | **Deployed and verified** | `/dashboard` returns HTML with HTTP 200 |
-| API error preservation | **Verified** | Missing ingredient returns HTTP 404 and JSON rather than React HTML |
-| Missing asset error handling | **Verified** | Nonexistent JavaScript asset returns HTTP 403/404 rather than 200 |
-| Automated frontend/backend deployment | Pending | GitHub Actions workflows not yet implemented and tested |
-| RDS PostgreSQL | Pending | Current deployed API uses SQLite |
-| Cognito authentication | Pending | No verified protected cloud API flow |
+**Figure 5. React Application Interface**
 
-#### Public deployment and request routing
+![Figure 5](images/fig5.png)
 
-The React build is stored in a private S3 bucket and served over HTTPS through CloudFront. CloudFront's default cache behavior serves the frontend; `/api/*` routes to the EC2 custom origin. The backend image runs Django with Gunicorn in Docker, and Nginx forwards requests from port 80 to the container's loopback port 8000.
+The frontend demonstrates the application's visual foundation and component-based structure. Additional feature pages and backend integrations will be completed as development progresses.
 
-The backend API behavior uses the AWS-managed **CachingDisabled** policy (`4135ea2d-6df8-44a3-9df3-4b5a84be39ad`) and **AllViewerExceptHostHeader** origin request policy (`b689b0a8-53d0-40ab-baf2-68738e2966ac`). This avoids CloudFront response caching for the API and forwards request information with the EC2 origin hostname as the `Host` header.
+### 3.2 AWS Infrastructure and Deployment Verification
 
-To support React client-side routes, a CloudFront Function rewrites extensionless frontend paths to `/index.html` on the default behavior. Distribution-wide 403/404-to-200 error mappings were removed because they incorrectly replaced Django API errors with frontend HTML.
+The team has successfully deployed the React frontend and Django backend to AWS. The application is accessible through a single CloudFront distribution, which serves static frontend assets from S3 and forwards API requests to the EC2 backend.
 
-### AWS IAM Identity Center and Team Access Control
+The deployed infrastructure includes:
 
-The team has partially completed Issue #40, which focuses on centralized AWS identity management and role-based access control.
+- **Networking and compute:** VPC, public subnet, Internet Gateway, route tables, and EC2.
+- **Backend deployment:** Docker, Gunicorn, Nginx, and Amazon ECR.
+- **Frontend hosting:** Private Amazon S3 bucket, CloudFront, and Origin Access Control.
+- **Infrastructure management:** AWS CloudFormation and Systems Manager Session Manager.
 
-The objective is to provide individual AWS identities and permissions appropriate to each team member's responsibilities, rather than sharing administrative credentials.
+#### Deployment Verification
 
-**Completed configuration:**
+The React frontend and Django backend have been successfully deployed to AWS and are accessible through the same CloudFront distribution.
 
-- Enabled and verified AWS IAM Identity Center and its access portal.
+**Public Deployment URLs:**
 
-- Confirmed the project AWS account is available for assignments.
-
-- Configured initial administrative and backend development groups.
-
-- Created permission sets for administration, backend development, and frontend development.
-
-- Configured initial AWS account assignments.
-
-- Configured AWS CLI v2 authentication through IAM Identity Center.
-
-- Successfully authenticated using AWS SSO and verified the active AWS identity with `aws sts get-caller-identity`.
-
-- Established the use of temporary AWS credentials instead of long-lived IAM access keys.
-
-- Documented the initial identity and access-control architecture.
-
-**Permission sets:**
-
-| Permission Set | Intended Responsibility |
+| Component | URL |
 |---|---|
-| AdministratorAccess | Infrastructure administration and AWS resource management |
-| RecipeApp-BackendDev | Backend infrastructure visibility, EC2 information, CloudWatch logs, and deployment information |
-| RecipeApp-FrontendDev | Frontend S3 resources and CloudFront visibility |
-These permission sets support separation of administrative and developer responsibilities. They also establish a foundation for applying the principle of least privilege.
+| **React Frontend** | [https://d1q0iv2raorz8j.cloudfront.net/](https://d1q0iv2raorz8j.cloudfront.net/) |
+| **Django REST API** | [https://d1q0iv2raorz8j.cloudfront.net/api/ingredients/](https://d1q0iv2raorz8j.cloudfront.net/api/ingredients/) |
 
-**Verification status:**
+**Verification Results:**
 
-| Security Check | Status |
+| Verification | Result |
 |---|---|
-| IAM Identity Center enabled | Verified |
-| AWS access portal available | Verified |
-| Permission sets created | Configured |
-| Initial AWS account assignments | Configured |
-| AWS CLI SSO authentication | Verified |
-| AWS identity verification | Verified |
-| Temporary credential-based access | Verified |
-| Individual team member onboarding | Pending |
-| Frontend group finalization | Pending |
-| MFA enforcement verification | Pending |
-| Least-privilege permission testing | Pending |
+| React frontend accessible through CloudFront | Passed — HTTPS |
+| Django Ingredient API accessible through CloudFront | Passed — HTTP 200 |
+| CloudFront `/api/*` routing to EC2 | Passed |
+| React client-side route refresh | Passed — HTTP 200 |
+| Missing ingredient API request | Passed — JSON HTTP 404 |
+| Missing static asset handling | Passed — HTTP 403/404 |
+| Dockerized Django running on EC2 | Verified |
+| EC2 administration through Systems Manager | Verified |
 
-**Remaining work:**
+**Figure 6. React Application Successfully Delivered Through CloudFront over HTTPS**
 
-Individual Identity Center accounts must be created and activated for the required team members. The frontend group configuration must also be finalized.
+![Figure 6](images/fig6a.png)
 
-After onboarding, each team member's effective permissions will be tested to confirm that access is restricted to their assigned responsibilities. MFA enforcement and permission boundaries must also be verified.
+**Figure 6.1. Django Ingredient API Returning a Valid JSON Response Through the Same CloudFront Distribution, Demonstrating Successful Backend Connectivity and Request Routing**
 
-**Midpoint status:** The initial IAM Identity Center setup is completed and administrative SSO authentication is verified. Team-wide onboarding and final security validation remain pending.
+![Figure 6.1](images/fig6b.png)
 
-### 3.3 Deployment evidence and remaining integration boundary
+These tests confirm that frontend content and backend API requests are successfully served through the same CloudFront domain. The deployment also preserves appropriate API error responses rather than incorrectly returning React HTML.
 
-The verified public endpoint is:
+The Ingredient API currently returns an empty paginated list because the deployed database has not yet been populated with ingredient records. Although the frontend and backend are operational, the complete ingredient-selection and recipe-recommendation workflow has not yet been integrated and verified end-to-end.
 
-`https://d1q0iv2raorz8j.cloudfront.net/api/ingredients/`
+**Figure 7. AWS CloudFront Distribution Configuration**
 
-The deployed API currently returns an empty paginated list because its database does not yet contain ingredient records. This confirms network routing and backend execution; it does **not** verify a complete ingredient-selection-to-recipe-recommendation journey inside React.
+![Figure 7](images/fig7.png)
 
-## 4. Testing and evidence
+Infrastructure provisioning is managed through AWS CloudFormation, while backend container images are stored in Amazon ECR. Application releases are currently performed manually, with automated testing and deployment planned for the final phase.
 
-| Test | Observed result | Status |
+### 3.3 AWS IAM Identity Center and Team Access Control
+
+The team has completed the IAM Identity Center configuration to establish centralized, role-based AWS access for project development.
+
+Instead of sharing AWS credentials, team members use individual identities and AWS Single Sign-On (SSO) to access authorized resources. Permission sets are assigned according to development responsibilities.
+
+#### Access Control Configuration
+
+| Permission Set | Responsibility |
+|---|---|
+| `AdministratorAccess` | AWS infrastructure administration and resource management |
+| `RecipeApp-BackendDev` | Backend-related AWS resources and deployment operations |
+| `RecipeApp-FrontendDev` | Frontend hosting resources, including S3 and CloudFront |
+
+The configuration supports separation of responsibilities and provides a foundation for least-privilege access control.
+
+The implementation includes IAM Identity Center users and groups, AWS account assignments, permission sets, and AWS CLI authentication using temporary credentials.
+
+**Figure 8. IAM Identity Center Configuration**
+
+![Figure 8](images/fig8.png)
+
+**Figure 9. AWS CLI SSO Verification of admin user with AdministratorAccess permission sets**
+
+![Figure 9](images/fig9.png)
+
+These configurations demonstrate centralized identity management and AWS access without relying on shared, long-lived IAM access keys.
+
+### 3.4 Midpoint Summary
+
+The midpoint implementation establishes the technical foundation required for continued development of the Recipe Suggestion App.
+
+The frontend and backend are deployed on AWS, core application structures are implemented, and centralized team access management is configured.
+
+The next development phase will focus on completing application workflows, integrating authentication and persistent database services, expanding automated testing, and improving deployment automation, security, and scalability.
+
+## 4. Testing and Evidence
+
+Testing during the midpoint phase focused on verifying core backend functionality, frontend build stability, container execution, and successful communication between deployed AWS components.
+
+The team performed local application tests, Docker smoke tests, and public endpoint verification to confirm that the foundational system operates as expected.
+
+### 4.1 Local Application Testing
+
+The Django backend was tested locally using its automated test framework and direct API requests.
+
+Testing covered ingredient search, case-insensitive matching, ingredient detail retrieval, user/profile functionality, and expected HTTP error responses for invalid or unsupported requests.
+
+The React frontend was also checked through local development and production build processes to verify that the application compiles successfully and its foundational components render correctly.
+
+**Figure 10. Backend Local Tests**
+
+![Figure 10](images/fig10.png)
+
+**Figure 10.1. Frontend Build Test**
+
+![Figure 10.1](images/fig101.png)
+
+### 4.2 Container and Cloud Deployment Testing
+
+The Dockerized Django backend was tested locally before deployment to AWS. Database migrations were applied, and the application successfully returned HTTP 200 responses from the test container.
+
+Following deployment, public endpoint tests were performed through CloudFront to verify communication between the frontend, API routing layer, Nginx, and Django backend.
+
+These tests confirmed:
+
+- Successful HTTPS delivery of the React frontend.
+- Successful HTTP 200 responses from the Django Ingredient API.
+- Correct JSON HTTP 404 responses for nonexistent ingredients.
+- Successful React client-side route handling.
+- Appropriate error responses for nonexistent static assets.
+
+**Figure 12. Successful HTTP 200 Response from the Django Ingredient API**
+
+![Figure 12](images/fig12.png)
+
+**Figure 12.1. Correct JSON HTTP 404 Response for a Nonexistent Ingredient**
+
+![Figure 12.1](images/fig121.png)
+
+**Figure 12.2. Successful React Client-Side Route Handling**
+
+![Figure 12.2](images/fig92.png)
+
+### 4.3 Testing Scope and Limitations
+
+The completed tests demonstrate that the foundational application components and AWS deployment are functioning as expected.
+
+However, the current tests primarily cover individual components, API behavior, and deployment connectivity. Full end-to-end recipe recommendation workflows, Cognito-protected API requests, and load/scalability benchmarking have not yet been completed.
+
+These areas will be addressed during the final development phase as additional application features and integrations become available.
+
+## 5. Challenges and Lessons Learned
+
+During the midpoint phase, the team encountered several challenges related to AWS infrastructure configuration, containerized backend deployment, and frontend-to-backend integration. Resolving these issues provided practical experience in debugging cloud environments and validating application behavior.
+
+### 5.1 Key Technical Challenges
+
+| Challenge | Resolution and Lesson Learned |
+|---|---|
+| **CloudFormation Deployment and Configuration** | Infrastructure updates occasionally failed due to invalid resource configurations, parameter handling, or service-specific requirements. The team learned to validate templates, review change sets, and troubleshoot stack events before applying changes to running resources. |
+| **Containerized Django Deployment** | The initial backend deployment required database migrations, correct environment variables, and proper Nginx-to-Gunicorn configuration. These issues highlighted the importance of consistent runtime configuration and repeatable deployment procedures. |
+| **CloudFront Routing and Error Handling** | Initial CloudFront error-response settings caused backend API errors to return React HTML with HTTP 200 instead of the correct JSON responses. The team resolved this by implementing a CloudFront Function for frontend routes and preserving API-specific error handling. This reinforced the importance of testing both successful and unsuccessful requests. |
+
+### 5.2 Remaining Development Challenges
+
+Although the team has established a working cloud deployment and foundational application structure, **a substantial portion of the application remains under development**.
+
+The primary remaining tasks include:
+
+- **Core application functionality:** Complete recipe management, ingredient selection, inventory, recommendations, shopping lists, and other user-facing workflows.
+- **Frontend and backend integration:** Connect React features to Django API endpoints and verify complete user interactions.
+- **Authentication and database:** Integrate Amazon Cognito and migrate from SQLite to Amazon RDS PostgreSQL.
+- **Deployment and security:** Introduce automated CI/CD workflows, improve backend HTTPS connectivity, and strengthen production configuration.
+- **Testing and scalability:** Expand automated testing, perform end-to-end verification, and evaluate system performance under increasing workloads.
+
+These tasks represent the primary development priorities leading up to the final evaluation.
+
+### 5.3 Lessons Learned
+
+The midpoint implementation demonstrated that successful cloud infrastructure deployment does not necessarily mean the application is functionally complete.
+
+The team learned the importance of separating infrastructure provisioning, runtime verification, and application-level testing. It also highlighted the value of modular development, clear team responsibilities, and maintaining consistent configuration across local and cloud environments.
+
+Moving forward, the main priority is to build upon the deployed infrastructure and complete the remaining application functionality while improving reliability, security, and deployment automation.
+
+## 6. Security and Scalability
+
+### 6.1 Implemented Security Measures
+
+Security has been considered throughout the infrastructure deployment, with controls implemented across network access, application hosting, container execution, and AWS identity management.
+
+| Area | Implemented Security Measures |
+|---|---|
+| **HTTPS and Content Delivery** | CloudFront provides HTTPS access for users and redirects HTTP requests to HTTPS. |
+| **Frontend Storage** | The React frontend is stored in a private S3 bucket with public access blocked. CloudFront uses Origin Access Control (OAC) to securely retrieve frontend assets. |
+| **Backend Network Access** | EC2 inbound HTTP access is restricted to the AWS-managed CloudFront origin-facing prefix list rather than the entire internet. |
+| **Origin Request Validation** | CloudFront includes a private `X-Recipe-Origin-Key` header that Nginx validates before forwarding API requests. |
+| **Container Isolation** | Django runs inside Docker, with Gunicorn accessible only through the EC2 host's loopback interface. Nginx handles incoming HTTP requests. |
+| **Identity and Access Management** | IAM Identity Center provides centralized team access through permission sets and temporary SSO credentials. EC2 uses IAM roles, and Systems Manager enables administration without inbound SSH. |
+| **Infrastructure Protection** | ECR image scanning and immutable tags, encrypted EC2 storage, and IMDSv2 requirements provide additional protection. |
+
+These measures establish a security foundation for the current deployment while reducing unnecessary public exposure and reliance on long-lived AWS credentials.
+
+### 6.2 Current Security Limitations
+
+Although browser-to-CloudFront communication is encrypted using HTTPS, the current CloudFront-to-EC2 connection uses HTTP. The private origin header provides an additional request validation mechanism but does not replace transport encryption or application authentication.
+
+The planned improvement is to configure HTTPS for backend origin traffic, potentially through an Application Load Balancer with AWS Certificate Manager. Amazon Cognito integration and Django authorization checks will also be required before supporting authenticated user workflows.
+
+Until these improvements are implemented and verified, the deployed application is intended for demonstration using nonsensitive data rather than production use.
+
+### 6.3 Scalability and Availability
+
+The current infrastructure supports scalable static content delivery through CloudFront and S3. However, backend processing is limited to a single EC2 `t3.micro` instance, with SQLite providing temporary database storage.
+
+This configuration is sufficient for the midpoint demonstration but does not provide automatic backend scaling or high availability.
+
+Future scalability improvements may include:
+
+- Migrating to Amazon RDS PostgreSQL for managed relational database storage.
+- Introducing an Application Load Balancer and EC2 Auto Scaling across multiple Availability Zones.
+- Implementing CloudWatch monitoring and health checks.
+- Conducting repeatable load tests to measure throughput, response times, error rates, and resource utilization.
+
+No backend load-testing results or automatic-scaling capabilities are claimed at midpoint. Performance measurements will be collected during the final development phase to evaluate system limitations and support future infrastructure decisions.
+
+---
+
+## 7. Remaining Work and Development Priorities
+
+Although the team has completed the foundational application architecture and AWS deployment, substantial development remains before the final evaluation.
+
+The remaining tasks are organized by priority to focus on delivering a functional application while improving security, reliability, and scalability.
+
+| Priority | Development Area | Planned Work |
 |---|---|---|
-| Local Ingredient API | Case-insensitive search; missing ID 404; unsupported POST 405 | Passed |
-| Local Django tests | Ingredient tests and user/profile checks passed; latest total not recorded in this report | Passed (count to refresh) |
-| Local Docker smoke test | HTTP 200 after database migrations | Passed |
-| AWS provisioning | Network, ECR, EC2, frontend CloudFormation resources deployed | Passed |
-| Container image distribution | `linux/amd64` backend image pushed to ECR | Passed |
-| Public frontend | CloudFront returns HTTP 200 and HTML from S3 | Passed |
-| Public ingredients API | CloudFront `/api/ingredients/?format=json` returns HTTP 200 and JSON | Passed |
-| Missing ingredient | `/api/ingredients/999999/` returns HTTP 404 and JSON error | Passed |
-| React client-side route | `/dashboard` returns HTTP 200 with HTML | Passed |
-| Missing static asset | `/assets/nonexistent.js` returns HTTP 403/404, not 200 | Passed |
-| Full React recommendation workflow | Not yet demonstrated | Pending |
-| Cognito protected API flow | Not yet demonstrated | Pending |
-| Load/scalability benchmark | Not yet performed | Pending |
+| **High** | Core Application Features | Complete recipe management, inventory, recommendations, shopping lists, and essential user workflows. |
+| **High** | Frontend–Backend Integration | Connect React feature modules to Django APIs and verify a complete ingredient-to-recipe recommendation journey. |
+| **High** | Authentication and Authorization | Integrate Amazon Cognito and enforce user ownership and role-based permissions in Django. |
+| **High** | Database Persistence | Migrate from SQLite to Amazon RDS PostgreSQL for persistent application data. |
+| **Medium** | Security Improvements | Enable HTTPS between CloudFront and the backend origin and validate access-control configurations. |
+| **Medium** | CI/CD Automation | Implement GitHub Actions workflows for automated testing, container builds, ECR publishing, and application deployment. |
+| **Medium** | Monitoring and Media Storage | Configure CloudWatch monitoring and implement required S3 media storage functionality. |
+| **High** | Scalability Evaluation | Perform load testing and collect numerical performance measurements to evaluate system capacity. |
+| **High** | Final Testing and Documentation | Complete regression tests, update technical documentation, and prepare a reproducible final demonstration. |
 
-Representative commands used for public verification:
+The immediate priority is to establish a working end-to-end recommendation workflow. Infrastructure improvements and additional features will be integrated alongside core application development, subject to available time and team resources.
 
-```bash
+---
 
-curl -i 'https://d1q0iv2raorz8j.cloudfront.net/api/ingredients/?format=json'
+## 8. Plan Through Final Submission
 
-curl -i 'https://d1q0iv2raorz8j.cloudfront.net/api/ingredients/999999/'
+<text>**Final Evaluation Deadline: November 13, 2026**</text>
 
-curl -I 'https://d1q0iv2raorz8j.cloudfront.net/dashboard'
-
-curl -I 'https://d1q0iv2raorz8j.cloudfront.net/assets/nonexistent.js'
-
-```
-
-The missing-ingredient test returned:
-
-```http
-
-HTTP/1.1 404 Not Found
-
-Content-Type: application/json
-
-```
-
-```json
-
-{"detail":"No Ingredient matches the given query."}
-
-```
-
-The successful ingredient list returned the expected pagination structure (`count`, `next`, `previous`, `results`), with an empty `results` array. These are endpoint smoke tests, not load tests or complete user-journey tests.
-
-**GitHub milestone progress:** Eight issues have been closed under the MVP / Midpoint Evaluation milestone: #1, #2, #3, #15, #17, #18, #23, and #34.
-
-**AWS IAM Identity Center:** Initial role-based access configuration has been completed under Issue #40. AWS SSO authentication and identity verification succeeded using AWS CLI v2. Individual team access and least-privilege testing remain pending.
-
-## 5. Challenges and lessons learned
-
-| Challenge | Cause | Resolution / lesson |
+| Phase | Focus | Expected Outcome |
 |---|---|---|
-| EC2 instance-type availability | EC2 capacity varies by instance type and Availability Zone | Verified the selected instance type and deployment location; future failover requires additional compute and routing configuration |
-| Docker API errors before migration | New SQLite database lacked Django schema | Applied migrations; database initialization must be included in deployment procedure |
-| Invalid CloudFront cache policy | Incorrect managed policy ID in template | Replaced with verified `Managed-CachingDisabled` ID; CloudFormation syntax validation does not validate every external service identifier |
-| CloudFormation parameter reuse failure | `BackendOriginKey` was introduced in a failed, rolled-back update | Supplied the private value again through a protected temporary parameter file; `UsePreviousValue` works only after successful deployment of the parameter |
-| Django HTTP 400 behind CloudFront | EC2 origin hostname absent from `DJANGO_ALLOWED_HOSTS` | Added origin DNS to allowed hosts and recreated the container to reload environment variables |
-| API 404 incorrectly returned HTTP 200 with React HTML | Distribution-wide CloudFront custom error responses converted 403/404 into SPA fallback | Removed those mappings; added viewer-request CloudFront Function for frontend routes only |
-| zsh rejected an API test URL | Unquoted `?` interpreted as a shell wildcard | Quoted URL in `curl` command; error occurred locally, not in AWS |
-| Risk of replacing running resources | Infrastructure changes can trigger resource replacement | Inspected CloudFormation change sets; verified distribution modification with `Replacement: False` |
+| **Midpoint — October 16** | Complete foundational development, AWS deployment, and initial verification. | Working React frontend and Django API hosted on AWS, with documented infrastructure and security configuration. |
+| **Core Integration — October 17–30** | Complete essential backend features and connect React interfaces to live APIs. | Functional ingredient selection, inventory, and recipe recommendation workflow. |
+| **Security and Optimization — October 31–November 6** | Integrate authentication and persistent storage, improve origin security, introduce deployment automation, and conduct initial performance testing. | More secure and reliable application with measurable performance results. |
+| **Final Verification — November 7–13** | Perform regression and end-to-end testing, resolve critical issues, update documentation, and prepare the demonstration. | Verified application functionality, finalized report, and reproducible final presentation. |
 
-These issues reinforced the distinction between successful provisioning, healthy runtime behavior, and correct application-level HTTP responses. The team tested both valid and invalid endpoints rather than relying solely on HTTP 200 checks.
+The team will prioritize completing the core user experience before introducing optional enhancements. Any remaining limitations will be documented and evaluated against the final project requirements.
 
-## 6. Security and scalability
+---
 
-### 6.1 Implemented security practices
+## 9. Midpoint Conclusion
 
-- **HTTPS for users:** Browser-to-CloudFront traffic uses HTTPS; the API cache behavior redirects HTTP viewers to HTTPS.
+As of October 16, 2026, the Recipe Suggestion App has progressed from its initial proposal to a modular Django and React application with a working AWS deployment.
 
-- **Private frontend storage:** S3 public access is blocked, and CloudFront uses Origin Access Control with a distribution-restricted bucket policy.
+The team has established the backend and frontend foundations, implemented reusable application components, deployed Django through Docker and Amazon EC2, and configured Amazon S3 and CloudFront for frontend hosting and API routing. AWS infrastructure is managed through CloudFormation, and IAM Identity Center provides centralized team access management.
 
-- **Restricted backend ingress:** EC2 inbound port 80 is restricted to the AWS-managed CloudFront origin-facing prefix list (`pl-3b927c52`), rather than open to all internet addresses. No inbound SSH is required.
+The midpoint verification demonstrates that the deployed React frontend and Django REST API are accessible through a shared HTTPS CloudFront domain. Successful API requests return valid JSON responses, invalid ingredient requests preserve appropriate HTTP errors, and React client-side navigation functions correctly.
 
-- **Additional origin check:** CloudFront sends a private `X-Recipe-Origin-Key` header that Nginx validates before forwarding `/api/` requests. The value is not stored in the repository.
+These accomplishments establish a functional cloud infrastructure and a foundation for continued application development.
 
-- **Container isolation:** Django is published only on EC2 loopback (`127.0.0.1:8000`); Nginx handles incoming origin traffic.
+However, the application is not yet feature-complete or production-ready. The remaining development phase will focus on completing the recipe recommendation workflow, integrating authentication and persistent storage, strengthening security, automating deployments, and collecting measurable scalability results.
 
-- **IAM and administration:** EC2 uses IAM roles; Systems Manager Session Manager provides access without SSH. Human AWS access uses IAM Identity Center and temporary SSO credentials.
-
-- **Additional infrastructure controls:** ECR immutable tags and image scanning, encrypted EC2 root EBS volume, and IMDSv2 requirement were configured during infrastructure setup.
-
-The project also uses AWS IAM Identity Center for centralized human access management. Initial administrative, backend development, and frontend development permission sets have been configured. AWS CLI authentication through IAM Identity Center has been verified, allowing the project manager to access AWS using temporary credentials instead of long-lived IAM access keys. Individual developer onboarding, MFA verification, and least-privilege testing remain pending.
-
-### 6.2 Security limitations
-
-**CloudFront-to-EC2 currently uses HTTP on port 80.** Thus, even though clients connect to CloudFront over HTTPS, the origin connection is not encrypted. The private header is only an additional access check; it is not equivalent to TLS or application authentication. The managed CloudFront prefix list also covers CloudFront origin-facing infrastructure generally, not this distribution exclusively.
-
-Until origin HTTPS and Cognito/Django authorization are implemented and verified, the deployed API should be used only with nonsensitive demonstration data. The report does not claim secure handling of user credentials or private account data.
-
-### 6.3 Scalability and availability
-
-The present deployment has one `t3.micro` EC2 instance running Django and a SQLite database file on the host. This is appropriate for an initial demonstration but is **not** highly available and does not automatically scale backend compute. The main route table supports VPC routing but does not itself provide instance failover. Multi-AZ failover would require additional infrastructure, such as a backend instance in another Availability Zone and traffic failover or load balancing.
-
-CloudFront can distribute and cache static frontend assets, but this does not demonstrate scalable Django throughput. Before the final evaluation, the team should perform repeatable load tests and report requests per second, response-time percentiles, error rates, and CPU/memory utilization. Depending on measured constraints, improvements could include PostgreSQL on RDS, health checks, monitoring, an Application Load Balancer, and EC2 Auto Scaling across Availability Zones. **No load-test statistics or automatic-scaling behavior are claimed at midpoint.**
-
-## 7. Remaining work and risks
-
-| Remaining task | Main risk | Next action |
-|---|---|---|
-| Complete recipe, inventory, and recommendation features | Missing core MVP functionality | Prioritize one available-ingredients-to-recipe result journey |
-| Verify frontend user journey | Public API route works, but feature-level UI integration is incomplete | Connect React ingredient selection and recommendation views to live API responses |
-| Integrate Cognito and protected endpoints | Identity mapping and authorization complexity | Implement and test sign-in, ownership, and role restrictions **after securing origin traffic** |
-| Improve origin security | CloudFront-to-EC2 traffic currently uses HTTP | Configure valid origin TLS and HTTPS-only CloudFront origin policy |
-| Introduce managed persistent database | SQLite limits concurrency and durability | Migrate to RDS PostgreSQL or document and test a justified interim persistence strategy |
-| Implement GitHub Actions CI/CD | Manual deployments and rollout errors | Implement and verify automated tests, image build, ECR push, EC2 rollout, and health checks |
-| Complete media and monitoring integrations | Missing operational features | Implement necessary S3 media support and CloudWatch monitoring |
-| Measure scalability | No numerical evidence for course requirement | Run repeatable load tests; capture throughput, latency, errors, and resource use |
-| Final demo and documentation | Schedule and integration risk | Freeze scope, capture screenshots, and verify a repeatable end-to-end demo |
-
-## 8. Plan through final submission
-
-**Midpoint — October 16:** Demonstrate the deployed CloudFront frontend, working Django API through the same HTTPS domain, foundational local application tests, Docker/ECR workflow, CloudFormation infrastructure, and documented error-handling fixes. Clearly label incomplete application workflows and security limitations.
-
-**Next phase:** Complete a minimal end-to-end recipe recommendation journey; integrate frontend features with backend APIs; secure the backend origin; implement authentication and persistence as feasible; verify application data flows.
-
-**Finalization — by November 13:** Finish prioritized functionality, automate deployment, add monitoring, run security and scalability checks, collect measurable results, perform regression tests, update diagrams, and record the final demonstration.
-
-## 9. Midpoint conclusion
-
-As of October 15, 2026, the Recipe Suggestion App has progressed from an initial proposal to a structured Django/React application with **eight completed GitHub issues** under the MVP / Midpoint Evaluation milestone. These tasks cover ingredient management, user profiles and preferences, frontend application structure, reusable UI components, Docker containerization, Amazon ECR, EC2 backend deployment, and S3/CloudFront frontend hosting.
-
-The team has also partially completed AWS IAM Identity Center configuration under Issue #40, establishing centralized identity management, role-based permission sets, and verified AWS SSO authentication.
-
-The deployed infrastructure now supports HTTPS access to the React frontend and Django REST API through Amazon CloudFront. The remaining development phase focuses on completing recipe recommendation workflows, authentication integration, persistent data storage, deployment automation, and measurable scalability testing.
-
-**The principal infrastructure milestone is now verified:** requests to the public CloudFront HTTPS domain reach the Django REST API through Nginx on EC2. Successful requests return JSON, nonexistent ingredients return proper HTTP 404 JSON errors, React routes return frontend HTML, and missing static assets retain error responses. These checks demonstrate a working deployed request path rather than only provisioned resources.
-
-The application is **not yet feature-complete or production-ready**. Recipe recommendation workflows, Cognito integration, origin HTTPS, managed persistence, automated deployment, and measured scalability remain priorities for the November 13 final submission.
-
+**Overall, the midpoint evaluation demonstrates successful cloud infrastructure deployment and foundational application development, with a clear implementation plan toward the November 13 final evaluation.**
