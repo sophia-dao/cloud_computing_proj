@@ -498,7 +498,7 @@ The React frontend was also checked through local development and production bui
       <strong>Backend Tests</strong>
     </td>
     <td align="center" width="50%">
-      <img src="images/fig8.1.png" alt="Frontend Build Test" width="100%">
+      <img src="images/fig81.png" alt="Frontend Build Test" width="100%">
       <br>
       <strong>Frontend Build Test</strong>
     </td>
@@ -528,17 +528,17 @@ These tests confirmed:
     <td align="center" width="33%">
       <img src="images/fig9.png" alt="Successful HTTP 200 response from Django Ingredient API" width="100%">
       <br>
-      <strong>Figure 9: Successful HTTP 200 Response from the Django Ingredient API</strong>
+      <strong>Successful HTTP 200 Response from the Django Ingredient API</strong>
     </td>
     <td align="center" width="33%">
-      <img src="images/fig9.1.png" alt="Correct JSON HTTP 404 response for a nonexistent ingredient" width="100%">
+      <img src="images/fig91.png" alt="Correct JSON HTTP 404 response for a nonexistent ingredient" width="100%">
       <br>
-      <strong>Figure 9.1: Correct JSON HTTP 404 Response for a Nonexistent Ingredient</strong>
+      <strong>Correct JSON HTTP 404 Response for a Nonexistent Ingredient</strong>
     </td>
     <td align="center" width="33%">
-      <img src="images/fig9.2.png" alt="Successful React client-side route handling" width="100%">
+      <img src="images/fig92.png" alt="Successful React client-side route handling" width="100%">
       <br>
-      <strong>Figure 9.2: Successful React Client-Side Route Handling</strong>
+      <strong>Successful React Client-Side Route Handling</strong>
     </td>
   </tr>
 </table>
