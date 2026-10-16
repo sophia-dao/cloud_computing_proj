@@ -87,3 +87,5 @@ yarn-error.log*
 
 *.tmp
 *.temp
+
+backend/staticfiles/
