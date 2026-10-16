@@ -521,6 +521,7 @@ These tests confirmed:
 - Appropriate error responses for nonexistent static assets.
 
 **Figure 9. Cloud Deployment and API Testing Results**
+![Figure 9](images/fig9.png)
 
 ```html
 <table>
