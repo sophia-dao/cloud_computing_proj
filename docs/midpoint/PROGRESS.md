@@ -489,22 +489,13 @@ The React frontend was also checked through local development and production bui
 
 **Figure 8. Local Application Testing Results**
 
-```html
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <img src="images/fig8.png" alt="Backend Tests" width="100%">
-      <br>
-      <strong>Backend Tests</strong>
-    </td>
-    <td align="center" width="50%">
-      <img src="images/fig81.png" alt="Frontend Build Test" width="100%">
-      <br>
-      <strong>Frontend Build Test</strong>
-    </td>
-  </tr>
-</table>
-```
+**Figure 8.1. Backend Tests**
+
+![Figure 8.1](images/fig8.png)
+
+**Figure 8.2. Frontend Build Test**
+
+![Figure 8.2](images/fig81.png)
 
 ### 4.2 Container and Cloud Deployment Testing
 
@@ -520,30 +511,17 @@ These tests confirmed:
 - Successful React client-side route handling.
 - Appropriate error responses for nonexistent static assets.
 
-**Figure 9. Cloud Deployment and API Testing Results**
+**Figure 9. Successful HTTP 200 Response from the Django Ingredient API**
+
 ![Figure 9](images/fig9.png)
 
-```html
-<table>
-  <tr>
-    <td align="center" width="33%">
-      <img src="images/fig9.png" alt="Successful HTTP 200 response from Django Ingredient API" width="100%">
-      <br>
-      <strong>Successful HTTP 200 Response from the Django Ingredient API</strong>
-    </td>
-    <td align="center" width="33%">
-      <img src="images/fig91.png" alt="Correct JSON HTTP 404 response for a nonexistent ingredient" width="100%">
-      <br>
-      <strong>Correct JSON HTTP 404 Response for a Nonexistent Ingredient</strong>
-    </td>
-    <td align="center" width="33%">
-      <img src="images/fig92.png" alt="Successful React client-side route handling" width="100%">
-      <br>
-      <strong>Successful React Client-Side Route Handling</strong>
-    </td>
-  </tr>
-</table>
-```
+**Figure 9.1. Correct JSON HTTP 404 Response for a Nonexistent Ingredient**
+
+![Figure 9.1](images/fig91.png)
+
+**Figure 9.2. Successful React Client-Side Route Handling**
+
+![Figure 9.2](images/fig92.png)
 
 ### 4.3 Testing Scope and Limitations
 
