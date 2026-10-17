@@ -8,6 +8,8 @@
 
 **Repository:** https://github.com/sophia-dao/cloud_computing_proj  
 
+**Demo video link:** https://www.youtube.com/watch?v=-jjEv46YW-0
+
 **Group members:** Sophia Dao, Burhan Khokhar, Brooke Sayer, Huy Le  
 
 **Report updated:** October 15, 2026

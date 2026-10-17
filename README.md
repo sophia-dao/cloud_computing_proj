@@ -17,6 +17,8 @@ This temporary milestone strategy allows us to demonstrate cloud computing conce
 
 See [Midpoint Evaluation Documentation](docs/midpoint/PROGRESS.md) for the implementation plan, architecture, progress, and submission requirements.
 
+[Click here to watch the demo video](https://www.youtube.com/watch?v=-jjEv46YW-0).
+
 ## Overview
 
 The Recipe Suggestion App is a cloud-based web application that helps users decide what to cook based on ingredients they already have.
