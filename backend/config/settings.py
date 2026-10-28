@@ -22,8 +22,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 
 import os
+from dotenv import load_dotenv
 
 # Development defaults; production values come from environment variables.
+load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 
 if not SECRET_KEY:
@@ -92,15 +94,57 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 
-# Database
-# https://docs.djangoproject.com/en/dev/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Database configuration
+# PostgreSQL is the standard database for development and production.
+# SQLite remains available for explicitly selected local experiments.
+
+DB_ENGINE = os.environ.get("DB_ENGINE", "postgresql").lower()
+
+if DB_ENGINE == "postgresql":
+    required_vars = [
+        "DB_NAME",
+        "DB_USER",
+        "DB_PASSWORD",
+        "DB_HOST",
+    ]
+
+    missing_vars = [
+        name for name in required_vars
+        if not os.environ.get(name)
+    ]
+
+    if missing_vars:
+        raise RuntimeError(
+            "Missing PostgreSQL environment variables: "
+            + ", ".join(missing_vars)
+        )
+
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ["DB_NAME"],
+            "USER": os.environ["DB_USER"],
+            "PASSWORD": os.environ["DB_PASSWORD"],
+            "HOST": os.environ["DB_HOST"],
+            "PORT": os.environ.get("DB_PORT", "5432"),
+            "CONN_MAX_AGE": 60,
+        }
     }
-}
+
+elif DB_ENGINE == "sqlite":
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
+
+else:
+    raise RuntimeError(
+        f"Unsupported DB_ENGINE: {DB_ENGINE}"
+    )
+
 
 
 # Password validation
