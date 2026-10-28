@@ -75,6 +75,56 @@ Resources:
       GatewayId: !Ref InternetGateway
 
   # ============================================================
+  # Private Database Subnets
+  # ============================================================
+
+  PrivateDatabaseSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref RecipeAppVPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: us-east-1a
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: recipe-app-private-db-subnet-a
+
+  PrivateDatabaseSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref RecipeAppVPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: us-east-1b
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: recipe-app-private-db-subnet-b
+
+  # ============================================================
+  # Private Database Route Table
+  # ============================================================
+
+  PrivateDatabaseRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref RecipeAppVPC
+      Tags:
+        - Key: Name
+          Value: recipe-app-private-db-rt
+
+  PrivateDatabaseSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateDatabaseSubnetA
+      RouteTableId: !Ref PrivateDatabaseRouteTable
+
+  PrivateDatabaseSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateDatabaseSubnetB
+      RouteTableId: !Ref PrivateDatabaseRouteTable
+
+  # ============================================================
   # Route Table Associations
   # ============================================================
 
@@ -108,3 +158,21 @@ Outputs:
     Value: !Ref PublicRouteTable
     Export:
       Name: RecipeApp-PublicRouteTableId
+
+  PrivateDatabaseSubnetAId:
+    Description: Private database subnet ID in us-east-1a
+    Value: !Ref PrivateDatabaseSubnetA
+    Export:
+      Name: RecipeApp-PrivateDatabaseSubnetAId
+
+  PrivateDatabaseSubnetBId:
+    Description: Private database subnet ID in us-east-1b
+    Value: !Ref PrivateDatabaseSubnetB
+    Export:
+      Name: RecipeApp-PrivateDatabaseSubnetBId
+
+  PrivateDatabaseRouteTableId:
+    Description: Private database route table ID
+    Value: !Ref PrivateDatabaseRouteTable
+    Export:
+      Name: RecipeApp-PrivateDatabaseRouteTableId
