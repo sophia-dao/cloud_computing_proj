@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 RUN DJANGO_SECRET_KEY=build-only-placeholder \
+    DB_ENGINE=sqlite \
     python manage.py collectstatic --noinput
 
 EXPOSE 8000
