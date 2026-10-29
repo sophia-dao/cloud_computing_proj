@@ -1,4 +1,3 @@
-
 FROM python:3.13-alpine
 
 WORKDIR /app
@@ -9,6 +8,10 @@ ENV PYTHONUNBUFFERED=1
 COPY requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Download the AWS RDS CA certificate bundle
+RUN mkdir -p /app/certs && \
+    python -c "import urllib.request; urllib.request.urlretrieve('https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem', '/app/certs/rds-global-bundle.pem')"
 
 COPY . .
 

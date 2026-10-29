@@ -1,0 +1,118 @@
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Recipe Suggestion App - Amazon RDS PostgreSQL
+
+Parameters:
+  BackendSecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group attached to the Django EC2 backend
+
+  DBInstanceClass:
+    Type: String
+    Default: db.t3.micro
+    Description: RDS instance class
+
+  DBName:
+    Type: String
+    Default: recipe_app
+
+  DBUsername:
+    Type: String
+    Default: recipe_admin
+
+Resources:
+
+  # ============================================================
+  # RDS Security Group
+  # ============================================================
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow PostgreSQL access from Django backend
+      VpcId:
+        Fn::ImportValue: RecipeApp-VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref BackendSecurityGroupId
+      Tags:
+        - Key: Name
+          Value: recipe-app-rds-sg
+
+  # ============================================================
+  # Database Subnet Group
+  # ============================================================
+
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private subnets for Recipe App RDS
+      SubnetIds:
+        - Fn::ImportValue: RecipeApp-PrivateDatabaseSubnetAId
+        - Fn::ImportValue: RecipeApp-PrivateDatabaseSubnetBId
+      Tags:
+        - Key: Name
+          Value: recipe-app-db-subnet-group
+
+  # ============================================================
+  # PostgreSQL Instance
+  # ============================================================
+
+  PostgreSQLDatabase:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: recipe-app-postgres
+      Engine: postgres
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: 20
+      StorageType: gp3
+
+      DBName: !Ref DBName
+      MasterUsername: !Ref DBUsername
+      ManageMasterUserPassword: true
+
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DatabaseSecurityGroup
+
+      PubliclyAccessible: false
+      MultiAZ: false
+      StorageEncrypted: true
+
+      BackupRetentionPeriod: 1
+      DeletionProtection: false
+      AutoMinorVersionUpgrade: true
+
+      Tags:
+        - Key: Name
+          Value: recipe-app-postgres
+
+Outputs:
+
+  DatabaseEndpoint:
+    Description: PostgreSQL endpoint hostname
+    Value: !GetAtt PostgreSQLDatabase.Endpoint.Address
+    Export:
+      Name: RecipeApp-DatabaseEndpoint
+
+  DatabasePort:
+    Description: PostgreSQL port
+    Value: !GetAtt PostgreSQLDatabase.Endpoint.Port
+    Export:
+      Name: RecipeApp-DatabasePort
+
+  DatabaseSecretArn:
+    Description: Secrets Manager ARN for RDS master credentials
+    Value: !GetAtt PostgreSQLDatabase.MasterUserSecret.SecretArn
+    Export:
+      Name: RecipeApp-DatabaseSecretArn
+
+  DatabaseSecurityGroupId:
+    Description: RDS security group ID
+    Value: !Ref DatabaseSecurityGroup
+    Export:
+      Name: RecipeApp-DatabaseSecurityGroupId

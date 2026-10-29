@@ -120,6 +120,13 @@ if DB_ENGINE == "postgresql":
             + ", ".join(missing_vars)
         )
 
+    db_options = {
+        "sslmode": os.environ.get("DB_SSLMODE", "prefer"),
+    }
+
+    if os.environ.get("DB_SSL_ROOT_CERT"):
+        db_options["sslrootcert"] = os.environ["DB_SSL_ROOT_CERT"]
+
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
@@ -129,6 +136,7 @@ if DB_ENGINE == "postgresql":
             "HOST": os.environ["DB_HOST"],
             "PORT": os.environ.get("DB_PORT", "5432"),
             "CONN_MAX_AGE": 60,
+            "OPTIONS": db_options,
         }
     }
 
@@ -144,7 +152,6 @@ else:
     raise RuntimeError(
         f"Unsupported DB_ENGINE: {DB_ENGINE}"
     )
-
 
 
 # Password validation

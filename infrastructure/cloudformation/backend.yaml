@@ -83,6 +83,16 @@ Resources:
                   - ecr:GetDownloadUrlForLayer
                 Resource: !ImportValue RecipeApp-BackendRepositoryArn
 
+        - PolicyName: RecipeAppRDSSecretRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  Fn::ImportValue: RecipeApp-DatabaseSecretArn
+
       Tags:
         - Key: Project
           Value: RecipeSuggestionApp
