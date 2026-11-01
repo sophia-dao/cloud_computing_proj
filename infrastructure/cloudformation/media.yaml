@@ -2,6 +2,11 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Private S3 storage for Recipe App media files
 
+Parameters:
+  CloudFrontDistributionId:
+    Type: String
+    Description: Existing CloudFront distribution ID
+
 Resources:
   MediaBucket:
     Type: AWS::S3::Bucket
@@ -25,6 +30,25 @@ Resources:
       OwnershipControls:
         Rules:
           - ObjectOwnership: BucketOwnerEnforced
+
+  MediaBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref MediaBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${MediaBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub
+                  - "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${DistributionId}"
+                  - DistributionId: !Ref CloudFrontDistributionId
 
 Outputs:
   MediaBucketName:
