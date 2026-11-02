@@ -8,9 +8,9 @@ from .filters import (
     get_request_application_user,
     parse_recipe_filters,
 )
-from .models import Recipe
+from .models import Recipe, Tag
 from .permissions import IsOwnerOrAdminOrReadOnly
-from .serializers import RecipeDetailSerializer, RecipeListSerializer, RecipeWriteSerializer
+from .serializers import RecipeDetailSerializer, RecipeListSerializer, RecipeWriteSerializer, TagSerializer
 
 
 class RecipePagination(PageNumberPagination):
@@ -57,3 +57,14 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
+
+class TagViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /api/tags/       List all available tags.
+    GET /api/tags/{id}/  Retrieve a tag.
+    """
+
+    queryset = Tag.objects.all().order_by("type", "name")
+    serializer_class = TagSerializer
+    permission_classes = []
+    pagination_class = None
