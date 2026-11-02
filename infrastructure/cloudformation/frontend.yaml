@@ -52,6 +52,7 @@ Resources:
         Enabled: true
         DefaultRootObject: index.html
 
+        
         Origins:
 
           # React frontend
@@ -73,6 +74,16 @@ Resources:
               - HeaderName: X-Recipe-Origin-Key
                 HeaderValue: !Ref BackendOriginKey
 
+          # Recipe images stored in private S3
+          - Id: MediaS3Origin
+            DomainName: !Sub
+              - "${BucketName}.s3.${AWS::Region}.amazonaws.com"
+              - BucketName: !ImportValue recipe-app-media-BucketName
+            OriginAccessControlId: !GetAtt FrontendOAC.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+
+
         # Default: serve React from S3
         DefaultCacheBehavior:
           TargetOriginId: S3Origin
@@ -92,6 +103,23 @@ Resources:
 
         # Route Django API requests to EC2
         CacheBehaviors:
+          - PathPattern: /media/*
+            TargetOriginId: MediaS3Origin
+            ViewerProtocolPolicy: redirect-to-https
+
+            AllowedMethods:
+              - GET
+              - HEAD
+
+            CachedMethods:
+              - GET
+              - HEAD
+
+            Compress: true
+
+            # AWS managed CachingOptimized policy
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+
           - PathPattern: /api/*
             TargetOriginId: DjangoAPIOrigin
             ViewerProtocolPolicy: redirect-to-https
@@ -185,6 +213,8 @@ Outputs:
 
   CloudFrontDistributionId:
     Value: !Ref FrontendDistribution
+    Export:
+      Name: !Sub "${AWS::StackName}-DistributionId"
 
   FrontendURL:
     Value: !Sub "https://${FrontendDistribution.DomainName}"

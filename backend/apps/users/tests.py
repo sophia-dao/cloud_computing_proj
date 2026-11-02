@@ -8,12 +8,12 @@ from rest_framework.test import APIClient
 from .models import (
     User,
     UserProfile,
-    Tag,
     Allergen,
     UserPreference,
     UserAllergy,
 )
 
+from apps.recipes.models import Tag
 
 class UserAPITests(TestCase):
     def setUp(self):
@@ -277,3 +277,29 @@ class UserAPITests(TestCase):
         ]:
             response = self.client.get(url)
             self.assertEqual(response.status_code, 403)
+
+    def test_tags_are_shared_between_users(self):
+        UserPreference.objects.create(
+            user=self.user,
+            tag=self.tag1,
+        )
+
+        UserPreference.objects.create(
+            user=self.other_user,
+            tag=self.tag1,
+        )
+
+        self.assertEqual(
+            Tag.objects.filter(
+                name="Vegetarian",
+                type=Tag.TagType.DIET,
+            ).count(),
+            1,
+        )
+
+        self.assertEqual(
+            UserPreference.objects.filter(
+                tag=self.tag1,
+            ).count(),
+            2,
+        )

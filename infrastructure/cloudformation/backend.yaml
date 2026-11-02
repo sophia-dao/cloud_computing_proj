@@ -83,6 +83,42 @@ Resources:
                   - ecr:GetDownloadUrlForLayer
                 Resource: !ImportValue RecipeApp-BackendRepositoryArn
 
+        - PolicyName: RecipeAppRDSSecretRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  Fn::ImportValue: RecipeApp-DatabaseSecretArn
+        
+        - PolicyName: RecipeAppMediaS3Access
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: AllowMediaObjectAccess
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource:
+                  Fn::Sub:
+                    - "${BucketArn}/media/*"
+                    - BucketArn:
+                        Fn::ImportValue: recipe-app-media-BucketArn
+
+              - Sid: AllowMediaBucketListing
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource:
+                  Fn::ImportValue: recipe-app-media-BucketArn
+                Condition:
+                  StringLike:
+                    s3:prefix:
+                      - "media/*"
+
       Tags:
         - Key: Project
           Value: RecipeSuggestionApp

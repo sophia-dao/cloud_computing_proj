@@ -1,7 +1,8 @@
 
 from rest_framework import serializers
 
-from .models import User, UserProfile, Tag, Allergen
+from .models import User, UserProfile, Allergen
+from apps.recipes.models import Tag
 
 
 class UserProfileSerializer(serializers.ModelSerializer):

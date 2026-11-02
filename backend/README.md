@@ -32,6 +32,7 @@ backend/
 │
 ├── requirements.txt            # Python dependencies
 ├── Dockerfile                  # Backend container definition
+├── compose.yaml                # Local Django + PostgreSQL services
 └── .env.example                # Required environment variables
 ```
 
@@ -645,7 +646,47 @@ Automated Django/DRF tests remain the authoritative regression tests for backend
 
 ## Local Development
 
-Create and activate the Python virtual environment:
+The backend uses **PostgreSQL** as the default database for local development. PostgreSQL runs in Docker, while Django can run either locally in a Python virtual environment or inside a Docker container.
+
+### Prerequisites
+
+- Python and pip
+- Docker Desktop with Docker Compose
+
+### Environment Configuration
+
+From the `backend/` directory, create a local environment file:
+
+```bash
+cp .env.example .env
+```
+
+Configure the required variables:
+
+```dotenv
+DJANGO_SECRET_KEY=your-generated-secret-key
+DJANGO_DEBUG=True
+DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+
+DB_ENGINE=postgresql
+DB_NAME=recipe_app
+DB_USER=recipe_user
+DB_PASSWORD=your-local-database-password
+DB_HOST=127.0.0.1
+DB_PORT=5432
+```
+
+Generate a Django secret key:
+
+```bash
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
+
+The `.env` file contains local credentials and must not be committed to Git. The `.env.example` file contains placeholders and can be committed.
+
+### Option A: Django Locally + PostgreSQL in Docker
+
+Create and activate a Python virtual environment:
 
 ```bash
 python3 -m venv .venv
@@ -658,7 +699,13 @@ Install backend dependencies:
 pip install -r requirements.txt
 ```
 
-Apply migrations:
+Start PostgreSQL:
+
+```bash
+docker compose up -d db
+```
+
+Apply database migrations:
 
 ```bash
 python manage.py migrate
@@ -676,34 +723,120 @@ The local API will normally be available at:
 http://127.0.0.1:8000/
 ```
 
-API requests can be tested using Postman.
+### Option B: Django + PostgreSQL in Docker
+
+Build and start both services:
+
+```bash
+docker compose up -d --build
+```
+
+Apply migrations inside the backend container:
+
+```bash
+docker compose exec backend python manage.py migrate
+```
+
+Check running services:
+
+```bash
+docker compose ps
+```
+
+View backend logs:
+
+```bash
+docker compose logs -f backend
+```
+
+In this configuration, Docker Compose provides the hostname `db` for PostgreSQL. The backend container uses `DB_HOST=db`, while Django running directly on the host uses `DB_HOST=127.0.0.1`.
+
+### Database Verification
+
+Verify the database connection:
+
+```bash
+python manage.py shell -c "from django.db import connection; connection.ensure_connection(); print(connection.vendor)"
+```
+
+Expected output:
+
+```text
+postgresql
+```
+
+For Dockerized Django:
+
+```bash
+docker compose exec backend python manage.py shell -c "from django.db import connection; connection.ensure_connection(); print(connection.vendor)"
+```
+
+### Testing
+
+Run the Django test suite:
+
+```bash
+python manage.py test
+```
+
+Or run the tests inside the backend container:
+
+```bash
+docker compose exec backend python manage.py test
+```
+
+### Database Persistence
+
+PostgreSQL uses the Docker named volume `postgres_data` to persist database files.
+
+Stop the containers without deleting database data:
+
+```bash
+docker compose down
+```
+
+**Warning:** `docker compose down -v` removes the named volume and deletes its stored database data.
+
+Existing SQLite data is not automatically transferred to PostgreSQL. The local PostgreSQL database is also separate from the planned production Amazon RDS PostgreSQL database.
 
 ---
 
 ## Docker
 
-The Django backend is designed to run inside Docker.
+The Django backend is containerized using the existing `Dockerfile`.
 
-Conceptually:
+The Docker image contains the Django application, its Python dependencies, and Gunicorn. Persistent application data must remain outside the container.
 
-```text
-Django Source
-     │
-     ▼
-Docker Image
-     │
-     ▼
-Backend Container
-```
-
-Persistent application data must remain outside the container.
+### Local Container Architecture
 
 ```text
-Backend Container
-      │
-      ├── PostgreSQL / Amazon RDS
-      └── Media / Amazon S3
+Docker Compose
+    │
+    ├── backend
+    │    ├── Django + DRF
+    │    └── Gunicorn :8000
+    │           │
+    │           ▼
+    └── db (PostgreSQL :5432)
+             │
+             ▼
+       postgres_data volume
 ```
+
+Docker Compose manages two services:
+
+- `backend`: Builds and runs the Django application using the existing Dockerfile.
+- `db`: Runs PostgreSQL 17 with a persistent volume and database health check.
+
+The backend service waits for PostgreSQL to become healthy before starting.
+
+### Production Deployment
+
+The existing AWS deployment uses a separately built Docker image stored in Amazon ECR and deployed to Amazon EC2.
+
+The local Docker Compose configuration is intended for development and integration testing. It does not automatically change the AWS deployment.
+
+The production architecture is planned to use Amazon RDS PostgreSQL for managed database storage. RDS provisioning, security configuration, and database migration are handled in a separate infrastructure task.
 
 The production Docker image must not contain persistent database data, uploaded media, or hardcoded production secrets.
 

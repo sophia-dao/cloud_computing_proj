@@ -65,35 +65,6 @@ class UserProfile(models.Model):
         return f"Profile for User #{self.user_id}"
 
 
-class Tag(models.Model):
-    """Canonical tags shared by user preferences and recipes."""
-
-    class TagType(models.TextChoices):
-        DIET = "DIET", "Diet"
-        CUISINE = "CUISINE", "Cuisine"
-        COST = "COST", "Cost"
-        OTHER = "OTHER", "Other"
-
-    name = models.CharField(max_length=100)
-
-    type = models.CharField(
-        max_length=20,
-        choices=TagType.choices,
-    )
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["name", "type"],
-                name="unique_tag_name_type",
-            )
-        ]
-        ordering = ["type", "name"]
-
-    def __str__(self):
-        return f"{self.name} ({self.type})"
-
-
 class Allergen(models.Model):
     """Canonical allergens shared across the application."""
 
@@ -119,7 +90,7 @@ class UserPreference(models.Model):
     )
 
     tag = models.ForeignKey(
-        Tag,
+        "recipes.Tag",
         on_delete=models.PROTECT,
         related_name="user_preferences",
     )
