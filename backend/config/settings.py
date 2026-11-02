@@ -200,6 +200,38 @@ STORAGES = {
     },
 }
 
+
+# Media storage configuration
+# Local development uses filesystem storage.
+# Production uses private S3 storage with CloudFront delivery.
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+MEDIA_STORAGE_BACKEND = os.getenv(
+    "MEDIA_STORAGE_BACKEND", "local"
+).lower()
+
+if MEDIA_STORAGE_BACKEND == "s3":
+    STORAGES["default"] = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "bucket_name": os.environ["AWS_MEDIA_BUCKET_NAME"],
+            "region_name": os.getenv("AWS_REGION", "us-east-1"),
+            "location": "media",
+            "default_acl": None,
+            "querystring_auth": False,
+            "custom_domain": os.environ["AWS_MEDIA_CLOUDFRONT_DOMAIN"],
+            "url_protocol": "https:",
+            "file_overwrite": False,
+        },
+    }
+
+elif MEDIA_STORAGE_BACKEND != "local":
+    raise RuntimeError(
+        f"Unsupported MEDIA_STORAGE_BACKEND: {MEDIA_STORAGE_BACKEND}"
+    )
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/dev/ref/settings/#default-auto-field
 
