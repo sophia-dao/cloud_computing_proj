@@ -13,6 +13,7 @@ from .models import (
     UserProfile,
     UserPreference,
     UserAllergy,
+    Tag,
     Allergen,
 )
 from .serializers import (
@@ -24,7 +25,7 @@ from .serializers import (
     UserAllergiesUpdateSerializer,
 )
 
-from apps.recipes.models import Tag
+
 
 def get_application_user(request):
     """

@@ -22,10 +22,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 
 import os
-from dotenv import load_dotenv
 
 # Development defaults; production values come from environment variables.
-load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 
 if not SECRET_KEY:
@@ -94,64 +92,15 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 
+# Database
+# https://docs.djangoproject.com/en/dev/ref/settings/#databases
 
-# Database configuration
-# PostgreSQL is the standard database for development and production.
-# SQLite remains available for explicitly selected local experiments.
-
-DB_ENGINE = os.environ.get("DB_ENGINE", "postgresql").lower()
-
-if DB_ENGINE == "postgresql":
-    required_vars = [
-        "DB_NAME",
-        "DB_USER",
-        "DB_PASSWORD",
-        "DB_HOST",
-    ]
-
-    missing_vars = [
-        name for name in required_vars
-        if not os.environ.get(name)
-    ]
-
-    if missing_vars:
-        raise RuntimeError(
-            "Missing PostgreSQL environment variables: "
-            + ", ".join(missing_vars)
-        )
-
-    db_options = {
-        "sslmode": os.environ.get("DB_SSLMODE", "prefer"),
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
-
-    if os.environ.get("DB_SSL_ROOT_CERT"):
-        db_options["sslrootcert"] = os.environ["DB_SSL_ROOT_CERT"]
-
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.environ["DB_NAME"],
-            "USER": os.environ["DB_USER"],
-            "PASSWORD": os.environ["DB_PASSWORD"],
-            "HOST": os.environ["DB_HOST"],
-            "PORT": os.environ.get("DB_PORT", "5432"),
-            "CONN_MAX_AGE": 60,
-            "OPTIONS": db_options,
-        }
-    }
-
-elif DB_ENGINE == "sqlite":
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
-
-else:
-    raise RuntimeError(
-        f"Unsupported DB_ENGINE: {DB_ENGINE}"
-    )
+}
 
 
 # Password validation
@@ -199,38 +148,6 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
-
-
-# Media storage configuration
-# Local development uses filesystem storage.
-# Production uses private S3 storage with CloudFront delivery.
-
-MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
-
-MEDIA_STORAGE_BACKEND = os.getenv(
-    "MEDIA_STORAGE_BACKEND", "local"
-).lower()
-
-if MEDIA_STORAGE_BACKEND == "s3":
-    STORAGES["default"] = {
-        "BACKEND": "storages.backends.s3.S3Storage",
-        "OPTIONS": {
-            "bucket_name": os.environ["AWS_MEDIA_BUCKET_NAME"],
-            "region_name": os.getenv("AWS_REGION", "us-east-1"),
-            "location": "media",
-            "default_acl": None,
-            "querystring_auth": False,
-            "custom_domain": os.environ["AWS_MEDIA_CLOUDFRONT_DOMAIN"],
-            "url_protocol": "https:",
-            "file_overwrite": False,
-        },
-    }
-
-elif MEDIA_STORAGE_BACKEND != "local":
-    raise RuntimeError(
-        f"Unsupported MEDIA_STORAGE_BACKEND: {MEDIA_STORAGE_BACKEND}"
-    )
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/dev/ref/settings/#default-auto-field

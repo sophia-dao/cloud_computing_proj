@@ -4,6 +4,7 @@ from django.contrib import admin
 from .models import (
     User,
     UserProfile,
+    Tag,
     Allergen,
     UserPreference,
     UserAllergy,
@@ -32,6 +33,13 @@ class UserAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("created_at", "updated_at")
     inlines = [UserProfileInline]
+
+
+@admin.register(Tag)
+class TagAdmin(admin.ModelAdmin):
+    list_display = ("id", "name", "type")
+    list_filter = ("type",)
+    search_fields = ("name",)
 
 
 @admin.register(Allergen)
