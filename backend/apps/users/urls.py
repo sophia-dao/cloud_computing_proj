@@ -2,6 +2,7 @@
 from django.urls import path
 
 from .views import (
+    AllergenListView,
     CurrentUserView,
     CurrentUserPreferencesView,
     CurrentUserAllergiesView,
@@ -19,4 +20,5 @@ urlpatterns = [
         CurrentUserAllergiesView.as_view(),
         name="current-user-allergies",
     ),
+    path("allergens/", AllergenListView.as_view(), name="allergen-list"),
 ]

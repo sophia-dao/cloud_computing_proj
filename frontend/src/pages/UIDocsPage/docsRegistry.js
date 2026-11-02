@@ -13,6 +13,7 @@ import CheckboxExamples from "./examples/CheckboxExamples";
 import SpinnerExamples from "./examples/SpinnerExamples";
 import ErrorStateExamples from "./examples/ErrorStateExamples";
 import EmptyStateExamples from "./examples/EmptyState";
+import MultiSelectExamples from "./examples/MultiSelectExamples";
 
 export const docsRegistry = [
     {
@@ -675,6 +676,79 @@ function Example() {
         />
     );
 }`,
+    },
+
+
+{
+        id: "multi-select",
+        name: "MultiSelect",
+        description:
+            "Reusable searchable dropdown for selecting multiple options using checkboxes.",
+
+        file: "src/components/common/MultiSelect/MultiSelect.jsx",
+        Preview: MultiSelectExamples,
+
+        props: [
+            ["label", "string", "—", "Field label displayed above the dropdown"],
+            ["placeholder", "string", '"Select options..."', "Text displayed when no options are selected"],
+            ["options", "array", "[]", "Objects with label and value properties"],
+            ["value", "array", "[]", "Array of selected option values"],
+            ["onChange", "function", "—", "Called with the updated array of selected values"],
+            ["disabled", "boolean", "false", "Disable the dropdown"],
+        ],
+
+        details:
+            "MultiSelect is a reusable controlled dropdown that allows users to " +
+            "select multiple values from a predefined list. It supports searching " +
+            "available options, selecting items through the shared Checkbox component, " +
+            "displaying selected values as chips, and clearing selections. " +
+            "The parent component manages selected values and any related filtering logic.",
+
+        useCases: [
+            "Excluding multiple allergens from recipe search results.",
+            "Selecting multiple recipe categories or dietary preferences.",
+            "Filtering collections by multiple attributes.",
+            "Choosing multiple options from a predefined list.",
+        ],
+
+        notes: [
+            "MultiSelect is a controlled component using value and onChange.",
+            "The value prop must be an array of selected option values.",
+            "The onChange callback receives the updated array, not a browser event.",
+            "Options must contain label and value properties.",
+            "The component uses the shared Checkbox component for individual selections.",
+            "Users can search available options without changing their current selections.",
+            "Selected values are displayed as chips inside the dropdown trigger.",
+            "Clicking outside the dropdown or pressing Escape closes it.",
+            "Use disabled to prevent interaction.",
+            "MultiSelect does not fetch data or apply filters itself.",
+        ],
+
+        code: `import { useState } from "react";
+import MultiSelect from "../../components/common/MultiSelect/MultiSelect";
+
+function Example() {
+    const [allergens, setAllergens] = useState([]);
+
+    const allergenOptions = [
+        { label: "Milk", value: "Milk" },
+        { label: "Egg", value: "Egg" },
+        { label: "Peanut", value: "Peanut" },
+        { label: "Soy", value: "Soy" },
+    ];
+
+    return (
+        <MultiSelect
+            label="Exclude allergens"
+            placeholder="Select allergens..."
+            options={allergenOptions}
+            value={allergens}
+            onChange={setAllergens}
+        />
+    );
+}
+
+export default Example;`,
     },
 
 ];

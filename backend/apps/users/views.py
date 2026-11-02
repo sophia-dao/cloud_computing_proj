@@ -3,7 +3,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.exceptions import PermissionDenied
@@ -165,3 +165,18 @@ class CurrentUserAllergiesView(APIView):
                 many=True,
             ).data
         })
+
+class AllergenListView(APIView):
+    """
+    GET /api/allergens/
+    Public, read-only list of available allergens.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        allergens = Allergen.objects.all().order_by("name")
+
+        serializer = AllergenSerializer(allergens, many=True)
+
+        return Response(serializer.data)
