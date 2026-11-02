@@ -2,12 +2,6 @@
 from django.db import models
 from django.db.models.functions import Lower
 
-
-
-from django.db import models
-from django.db.models.functions import Lower
-
-
 class Ingredient(models.Model):
     name = models.CharField(max_length=255)
     category = models.CharField(
