@@ -6,8 +6,10 @@ import SearchBar from "../../components/common/SearchBar/SearchBar";
 import Spinner from "../../components/common/Spinner/Spinner";
 import Button from "../../components/common/Button/Button";
 import recipesApi from "../../services/RecipesApi";
+import allergensApi from "../../services/AllergensApi";
 import tagsApi from "../../services/TagsApi";
 import Select from "../../components/common/Select/Select";
+import MultiSelect from "../../components/common/MultiSelect/MultiSelect";
 import { buildTagOptions } from "../../utils/tagUtils";
 
 import "./RecipeSearchPage.css";
@@ -30,10 +32,14 @@ export default function RecipeSearchPage() {
         cost: "",
         other: "",
     });
+    const [selectedAllergens, setSelectedAllergens] = useState([]);
 
     const [tags, setTags] = useState([]);
     const [tagsLoading, setTagsLoading] = useState(true);
     const [tagsError, setTagsError] = useState("");
+
+    const [allergens, setAllergens] = useState([]);
+    const [allergensError, setAllergensError] = useState("");
 
     const cuisineOptions = buildTagOptions(
         tags, "CUISINE", "All cuisines"
@@ -50,6 +56,11 @@ export default function RecipeSearchPage() {
     const categoryOptions = buildTagOptions(
         tags, "OTHER", "All categories"
     );
+
+    const allergenOptions = allergens.map((allergen) => ({
+        label: allergen.name,
+        value: allergen.name,
+    }));
 
     useEffect(() => {
         const controller = new AbortController();
@@ -79,11 +90,40 @@ export default function RecipeSearchPage() {
         return () => controller.abort();
     }, []);
 
+    useEffect(() => {
+        const controller = new AbortController();
+
+        async function loadAllergens() {
+            try {
+                const data = await allergensApi.getAllergens({
+                    signal: controller.signal,
+                });
+
+                if (!controller.signal.aborted) {
+                    setAllergens(data);
+                }
+            } catch (err) {
+                if (!controller.signal.aborted) {
+                    setAllergensError("Unable to load allergen options.");
+                }
+            }
+        }
+
+        loadAllergens();
+
+        return () => controller.abort();
+    }, []);
+
     function handleFilterChange(name, value) {
         setFilters((current) => ({
             ...current,
             [name]: value,
         }));
+        setPage(1);
+    }
+
+    function handleAllergensChange(values) {
+        setSelectedAllergens(values);
         setPage(1);
     }
 
@@ -94,6 +134,8 @@ export default function RecipeSearchPage() {
             cost: "",
             other: "",
         });
+
+        setSelectedAllergens([]);
         setPage(1);
     }
 
@@ -114,6 +156,7 @@ export default function RecipeSearchPage() {
                     page,
                     search: searchQuery,
                     ...filters,
+                    allergy: selectedAllergens,
                     signal: controller.signal,
                 });
 
@@ -136,7 +179,7 @@ export default function RecipeSearchPage() {
         loadRecipes();
 
         return () => controller.abort();
-    }, [page, searchQuery, filters, retryKey]);
+    }, [page, searchQuery, filters, selectedAllergens, retryKey]);
 
     return (
         <section className="recipe-search-page">
@@ -173,7 +216,10 @@ export default function RecipeSearchPage() {
 
                     <Button
                         variant="secondary"
-                        disabled={!Object.values(filters).some(Boolean)}
+                        disabled={
+                            !Object.values(filters).some(Boolean) &&
+                            selectedAllergens.length === 0
+                        }
                         onClick={clearFilters}
                     >
                         Clear all
@@ -181,6 +227,16 @@ export default function RecipeSearchPage() {
                 </div>
 
                 <div className="recipe-search-page__filters">
+                    {allergenOptions.length > 0 && (
+                        <MultiSelect
+                            label="Exclude allergens"
+                            placeholder="Select allergens..."
+                            options={allergenOptions}
+                            value={selectedAllergens}
+                            onChange={handleAllergensChange}
+                        />
+                    )}
+                    
                     {cuisineOptions.length > 1 && (
                         <Select
                             label="Cuisine"
@@ -241,6 +297,16 @@ export default function RecipeSearchPage() {
                         {tagsError}
                     </p>
                 )}
+
+                {allergensError && (
+                    <p className="recipe-search-page__filter-status" role="alert">
+                        {allergensError}
+                    </p>
+                )}
+                <p className="recipe-search-page__allergen-notice">
+                    * Allergen information is still being verified.
+                    Filtered results are not guaranteed to be allergen-free.
+                </p>
             </div>
 
             <div className="recipe-search-page__results-header">
@@ -267,8 +333,8 @@ export default function RecipeSearchPage() {
             ) : recipes.length === 0 ? (
                 <div className="recipe-search-page__status">
                     <p>
-                        {searchQuery
-                            ? `No recipes found for "${searchQuery}".`
+                        {searchQuery || Object.values(filters).some(Boolean) || selectedAllergens.length > 0
+                            ? "No recipes match your current search or filters. Try adjusting your criteria."
                             : "No recipes available."}
                     </p>
                 </div>
