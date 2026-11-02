@@ -192,10 +192,33 @@ class RecipeSearchUserDefaultsAPITests(APITestCase):
         cls.vietnamese = make_tag("Vietnamese", T.CUISINE)
         cls.halal = make_tag("Halal", T.DIET)
 
-        cls.bibimbap = make_recipe("Bibimbap", tags=[cls.korean])
-        cls.bulgogi = make_recipe("Halal Bulgogi", tags=[cls.korean, cls.halal])
-        cls.pho = make_recipe("Halal Pho", tags=[cls.vietnamese, cls.halal])
-        cls.spring_rolls = make_recipe("Spring Rolls", tags=[cls.vietnamese])
+        rice = make_ingredient("Rice")
+        rice.allergens_verified = True
+        rice.save(update_fields=["allergens_verified"])
+
+        cls.bibimbap = make_recipe(
+            "Bibimbap",
+            ingredients=[rice],
+            tags=[cls.korean],
+        )
+
+        cls.bulgogi = make_recipe(
+            "Halal Bulgogi",
+            ingredients=[rice],
+            tags=[cls.korean, cls.halal],
+        )
+
+        cls.pho = make_recipe(
+            "Halal Pho",
+            ingredients=[rice],
+            tags=[cls.vietnamese, cls.halal],
+        )
+
+        cls.spring_rolls = make_recipe(
+            "Spring Rolls",
+            ingredients=[rice],
+            tags=[cls.vietnamese],
+        )
 
         cls.auth_user = make_user()
         app_user = User.objects.create(auth_user=cls.auth_user)
@@ -243,22 +266,77 @@ class RecipeSearchUserDefaultsAPITests(APITestCase):
         self.assertEqual(len(self.names({"user": 1, "user_id": 1})), 4)
 
 
-@skipUnless(allergen_filtering_available(), "Ingredients are not linked to Allergens yet")
-class RecipeAllergenExclusionAPITests(APITestCase):
-    """Runs automatically once Ingredient gains its `allergens` relationship."""
 
+@skipUnless(
+    allergen_filtering_available(),
+    "Ingredients are not linked to Allergens yet",
+)
+class RecipeAllergenExclusionAPITests(APITestCase):
     @classmethod
     def setUpTestData(cls):
         cls.peanut = Allergen.objects.create(name="Peanut")
-        peanut_butter = make_ingredient("Peanut Butter")
-        peanut_butter.allergens.add(cls.peanut)
-        noodles = make_ingredient("Noodles")
 
-        make_recipe("Peanut Noodles", ingredients=[noodles, peanut_butter])
-        make_recipe("Plain Noodles", ingredients=[noodles])
+        cls.peanut_butter = make_ingredient("Peanut Butter")
+        cls.peanut_butter.allergens_verified = True
+        cls.peanut_butter.save(update_fields=["allergens_verified"])
+        cls.peanut_butter.allergens.add(cls.peanut)
+
+        cls.noodles = make_ingredient("Noodles")
+        cls.noodles.allergens_verified = True
+        cls.noodles.save(update_fields=["allergens_verified"])
+
+        make_recipe(
+            "Peanut Noodles",
+            ingredients=[cls.noodles, cls.peanut_butter],
+        )
+        make_recipe(
+            "Plain Noodles",
+            ingredients=[cls.noodles],
+        )
+
+    def get_names(self, query):
+        response = self.client.get(LIST_URL, query)
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+            response.data,
+        )
+        return [r["name"] for r in response.data["results"]]
 
     def test_recipe_with_excluded_allergen_is_not_returned(self):
-        response = self.client.get(LIST_URL, {"allergy": "peanut"})
         self.assertEqual(
-            [r["name"] for r in response.data["results"]], ["Plain Noodles"]
+            self.get_names({"allergy": "peanut"}),
+            ["Plain Noodles"],
+        )
+
+    def test_unverified_ingredient_is_excluded(self):
+        self.noodles.allergens_verified = False
+        self.noodles.save(update_fields=["allergens_verified"])
+
+        self.assertEqual(
+            self.get_names({"allergy": "peanut"}),
+            [],
+        )
+
+    def test_unverified_ingredient_is_allowed_without_allergy_filter(self):
+        self.noodles.allergens_verified = False
+        self.noodles.save(update_fields=["allergens_verified"])
+
+        self.assertEqual(
+            self.get_names({}),
+            ["Peanut Noodles", "Plain Noodles"],
+        )
+
+    def test_verified_recipe_without_excluded_allergen_is_returned(self):
+        self.assertEqual(
+            self.get_names({"allergy": "peanut"}),
+            ["Plain Noodles"],
+        )
+
+    def test_recipe_without_ingredients_is_excluded(self):
+        make_recipe("Empty Recipe", ingredients=[])
+
+        self.assertEqual(
+            self.get_names({"allergy": "peanut"}),
+            ["Plain Noodles"],
         )

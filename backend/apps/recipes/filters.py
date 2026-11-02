@@ -243,6 +243,23 @@ def filter_recipes(queryset, criteria):
             )
         )
 
+        queryset = queryset.exclude(
+            Exists(
+                RecipeIngredient.objects.filter(
+                    recipe=OuterRef("pk"),
+                    ingredient__allergens_verified=False,
+                )
+            )
+        )
+
+        queryset = queryset.filter(
+            Exists(
+                RecipeIngredient.objects.filter(
+                    recipe=OuterRef("pk"),
+                )
+            )
+        )
+
     return queryset
 
 
