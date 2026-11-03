@@ -74,7 +74,7 @@ export default function RecipeSearchPage() {
                 if (!controller.signal.aborted) {
                     setTags(data);
                 }
-            } catch (err) {
+            } catch {
                 if (!controller.signal.aborted) {
                     setTagsError("Unable to load recipe filters.");
                 }
@@ -102,7 +102,7 @@ export default function RecipeSearchPage() {
                 if (!controller.signal.aborted) {
                     setAllergens(data);
                 }
-            } catch (err) {
+            } catch {
                 if (!controller.signal.aborted) {
                     setAllergensError("Unable to load allergen options.");
                 }
