@@ -1,0 +1,96 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Recipe App - Private Backend Auto Scaling
+
+Parameters:
+  BackendAMI:
+    Type: AWS::EC2::Image::Id
+    Default: ami-0bf29dae3dba19991
+
+  BackendInstanceType:
+    Type: String
+    Default: t3.micro
+
+  BackendInstanceProfile:
+    Type: String
+    Default: recipe-app-backend-BackendInstanceProfile-W7pWnhiQOmJq
+
+  BackendSecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Default: sg-0b374bbd534b0ac8e
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-0cdb39949b89716ec
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-01579ed4906000b1d
+
+  BackendTargetGroupArn:
+    Type: String
+    Default: arn:aws:elasticloadbalancing:us-east-1:362176666546:targetgroup/recipe-app-private-backend/51b590252cac0b10
+
+Resources:
+  BackendLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: recipe-app-private-backend
+      LaunchTemplateData:
+        ImageId: !Ref BackendAMI
+        InstanceType: !Ref BackendInstanceType
+
+        IamInstanceProfile:
+          Name: !Ref BackendInstanceProfile
+
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpTokens: required
+          HttpPutResponseHopLimit: 2
+
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            AssociatePublicIpAddress: false
+            Groups:
+              - !Ref BackendSecurityGroup
+            DeleteOnTermination: true
+
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: recipe-app-private-asg-backend
+
+  BackendAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: recipe-app-private-backend-asg
+
+      VPCZoneIdentifier:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+
+      LaunchTemplate:
+        LaunchTemplateId: !Ref BackendLaunchTemplate
+        Version: !GetAtt BackendLaunchTemplate.LatestVersionNumber
+
+      MinSize: "2"
+      MaxSize: "3"
+      DesiredCapacity: "2"
+
+      TargetGroupARNs:
+        - !Ref BackendTargetGroupArn
+
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 300
+
+      Tags:
+        - Key: Name
+          Value: recipe-app-private-asg-backend
+          PropagateAtLaunch: true
+
+Outputs:
+  AutoScalingGroupName:
+    Value: !Ref BackendAutoScalingGroup
+
+  LaunchTemplateId:
+    Value: !Ref BackendLaunchTemplate

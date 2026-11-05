@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Recipe Suggestion App - private AWS service access via VPC endpoints
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-0197766fbe7061905
+    Description: Existing Recipe App VPC
+  ApplicationSubnetAId:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-0cdb39949b89716ec
+  ApplicationSubnetBId:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-01579ed4906000b1d
+  ApplicationRouteTableAId:
+    Type: String
+    Default: rtb-0676dffe617be86ca
+  ApplicationRouteTableBId:
+    Type: String
+    Default: rtb-0c6b007fe66f090b4
+
+Resources:
+  EndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTPS to VPC endpoints from private application subnets
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.5.0/24
+          Description: Private application subnet A
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.6.0/24
+          Description: Private application subnet B
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.2.0/24
+          Description: Existing public backend EC2 subnet
+      Tags:
+        - Key: Name
+          Value: recipe-app-vpc-endpoints
+
+  EcrApiEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.api
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref ApplicationSubnetAId, !Ref ApplicationSubnetBId]
+      SecurityGroupIds: [!Ref EndpointSecurityGroup]
+
+  EcrDockerEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.dkr
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref ApplicationSubnetAId, !Ref ApplicationSubnetBId]
+      SecurityGroupIds: [!Ref EndpointSecurityGroup]
+
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      RouteTableIds: [!Ref ApplicationRouteTableAId, !Ref ApplicationRouteTableBId]
+
+  SecretsManagerEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref ApplicationSubnetAId, !Ref ApplicationSubnetBId]
+      SecurityGroupIds: [!Ref EndpointSecurityGroup]
+
+  SsmEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref ApplicationSubnetAId, !Ref ApplicationSubnetBId]
+      SecurityGroupIds: [!Ref EndpointSecurityGroup]
+
+  SsmMessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref ApplicationSubnetAId, !Ref ApplicationSubnetBId]
+      SecurityGroupIds: [!Ref EndpointSecurityGroup]
+
+  Ec2MessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref ApplicationSubnetAId, !Ref ApplicationSubnetBId]
+      SecurityGroupIds: [!Ref EndpointSecurityGroup]
+
+  CloudWatchLogsEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VpcId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.logs
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref ApplicationSubnetAId, !Ref ApplicationSubnetBId]
+      SecurityGroupIds: [!Ref EndpointSecurityGroup]
+
+Outputs:
+  EndpointSecurityGroupId:
+    Value: !Ref EndpointSecurityGroup
+    Export:
+      Name: RecipeApp-EndpointSecurityGroupId
+  S3GatewayEndpointId:
+    Value: !Ref S3GatewayEndpoint
+  EcrApiEndpointId:
+    Value: !Ref EcrApiEndpoint
+  EcrDockerEndpointId:
+    Value: !Ref EcrDockerEndpoint

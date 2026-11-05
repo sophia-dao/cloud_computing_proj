@@ -1,0 +1,111 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Recipe Suggestion App - Internal Application Load Balancer for private backend instances
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-0197766fbe7061905
+    Description: Existing Recipe App VPC
+  ApplicationSubnetAId:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-0cdb39949b89716ec
+  ApplicationSubnetBId:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-01579ed4906000b1d
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: VPC CIDR used for internal ALB outbound traffic to private backend targets
+
+Resources:
+  InternalAlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Internal ALB HTTP ingress from within Recipe App VPC
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        SourceSecurityGroupId: sg-0ccc6ae7953ecfc8d
+        Description: Allow CloudFront VPC origin access
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref VpcCidr
+          Description: Forward HTTP to private EC2 targets
+      Tags:
+        - Key: Name
+          Value: recipe-app-internal-alb-sg
+
+  InternalApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: recipe-app-internal-alb
+      Type: application
+      Scheme: internal
+      IpAddressType: ipv4
+      Subnets:
+        - !Ref ApplicationSubnetAId
+        - !Ref ApplicationSubnetBId
+      SecurityGroups:
+        - !Ref InternalAlbSecurityGroup
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: 'false'
+      Tags:
+        - Key: Name
+          Value: recipe-app-internal-alb
+
+  BackendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: recipe-app-private-backend
+      VpcId: !Ref VpcId
+      Protocol: HTTP
+      Port: 80
+      TargetType: instance
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: /healthz
+      HealthCheckPort: traffic-port
+      Matcher:
+        HttpCode: '200'
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      Tags:
+        - Key: Name
+          Value: recipe-app-private-backend
+
+  InternalHttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref InternalApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref BackendTargetGroup
+
+Outputs:
+  InternalAlbArn:
+    Description: ARN of the internal Application Load Balancer for CloudFront VPC origin
+    Value: !Ref InternalApplicationLoadBalancer
+    Export:
+      Name: RecipeApp-InternalAlbArn
+  InternalAlbDnsName:
+    Description: Internal-only DNS name (not publicly accessible)
+    Value: !GetAtt InternalApplicationLoadBalancer.DNSName
+    Export:
+      Name: RecipeApp-InternalAlbDnsName
+  InternalAlbSecurityGroupId:
+    Value: !Ref InternalAlbSecurityGroup
+    Export:
+      Name: RecipeApp-InternalAlbSecurityGroupId
+  BackendTargetGroupArn:
+    Value: !Ref BackendTargetGroup
+    Export:
+      Name: RecipeApp-BackendTargetGroupArn
