@@ -1,6 +1,6 @@
 
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Recipe Suggestion App - VPC and public subnet infrastructure
+Description: Recipe Suggestion App - VPC with public, private application, and private database subnets
 
 Resources:
 
@@ -73,6 +73,66 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
+
+  # ============================================================
+  # Private Application Subnets (two Availability Zones)
+  # ============================================================
+
+  PrivateApplicationSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref RecipeAppVPC
+      CidrBlock: 10.0.5.0/24
+      AvailabilityZone: us-east-1a
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: recipe-app-private-app-subnet-a
+        - Key: Project
+          Value: RecipeSuggestionApp
+
+  PrivateApplicationSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref RecipeAppVPC
+      CidrBlock: 10.0.6.0/24
+      AvailabilityZone: us-east-1b
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: recipe-app-private-app-subnet-b
+        - Key: Project
+          Value: RecipeSuggestionApp
+
+  # Application route tables intentionally have only the implicit local VPC route.
+  # Private AWS service access will be added using VPC endpoints in a later stack.
+  PrivateApplicationRouteTableA:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref RecipeAppVPC
+      Tags:
+        - Key: Name
+          Value: recipe-app-private-app-rt-a
+
+  PrivateApplicationRouteTableB:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref RecipeAppVPC
+      Tags:
+        - Key: Name
+          Value: recipe-app-private-app-rt-b
+
+  PrivateApplicationSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateApplicationSubnetA
+      RouteTableId: !Ref PrivateApplicationRouteTableA
+
+  PrivateApplicationSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateApplicationSubnetB
+      RouteTableId: !Ref PrivateApplicationRouteTableB
 
   # ============================================================
   # Private Database Subnets
@@ -176,3 +236,27 @@ Outputs:
     Value: !Ref PrivateDatabaseRouteTable
     Export:
       Name: RecipeApp-PrivateDatabaseRouteTableId
+
+  PrivateApplicationSubnetAId:
+    Description: Private application subnet ID in us-east-1a
+    Value: !Ref PrivateApplicationSubnetA
+    Export:
+      Name: RecipeApp-PrivateApplicationSubnetAId
+
+  PrivateApplicationSubnetBId:
+    Description: Private application subnet ID in us-east-1b
+    Value: !Ref PrivateApplicationSubnetB
+    Export:
+      Name: RecipeApp-PrivateApplicationSubnetBId
+
+  PrivateApplicationRouteTableAId:
+    Description: Private application route table ID in us-east-1a
+    Value: !Ref PrivateApplicationRouteTableA
+    Export:
+      Name: RecipeApp-PrivateApplicationRouteTableAId
+
+  PrivateApplicationRouteTableBId:
+    Description: Private application route table ID in us-east-1b
+    Value: !Ref PrivateApplicationRouteTableB
+    Export:
+      Name: RecipeApp-PrivateApplicationRouteTableBId

@@ -89,3 +89,7 @@ yarn-error.log*
 *.temp
 
 backend/staticfiles/
+github_issues.json
+apply_issues.py
+auth-backend.md
+auth-frontend.md 
