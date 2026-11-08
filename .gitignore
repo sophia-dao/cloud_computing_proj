@@ -129,3 +129,5 @@ infrastructure/generated/
 
 # Generated Auto Scaling CloudFormation template
 infrastructure/cloudformation/autoscaling-packaged.yaml
+
+github
