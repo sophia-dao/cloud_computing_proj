@@ -89,3 +89,45 @@ yarn-error.log*
 *.temp
 
 backend/staticfiles/
+github_issues.json
+apply_issues.py
+auth-backend.md
+auth-frontend.md 
+
+# ==========================================
+# AWS Infrastructure
+# ==========================================
+
+# CloudFront configuration backups
+# May contain private origin headers/secrets
+infrastructure/backups/
+
+# Local AWS credentials
+.aws/
+aws-credentials*
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Generated CloudFormation artifacts
+infrastructure/packaged/
+infrastructure/generated/
+
+# Local deployment environment files
+*.env
+
+# ==========================================
+# Infrastructure Temporary Files
+# ==========================================
+
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Generated Auto Scaling CloudFormation template
+infrastructure/cloudformation/autoscaling-packaged.yaml
+
+github

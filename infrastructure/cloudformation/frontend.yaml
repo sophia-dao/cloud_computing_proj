@@ -62,17 +62,26 @@ Resources:
             S3OriginConfig:
               OriginAccessIdentity: ""
 
-          # Django backend on EC2
+          # Original public EC2 backend — retained for rollback
           - Id: DjangoAPIOrigin
             DomainName: ec2-3-214-51-24.compute-1.amazonaws.com
             CustomOriginConfig:
               HTTPPort: 80
               OriginProtocolPolicy: http-only
               OriginReadTimeout: 30
-
             OriginCustomHeaders:
               - HeaderName: X-Recipe-Origin-Key
                 HeaderValue: !Ref BackendOriginKey
+
+          # Private Django backend through CloudFront VPC origin
+          - Id: PrivateDjangoAPIOrigin
+            DomainName: internal-recipe-app-internal-alb-1524514520.us-east-1.elb.amazonaws.com
+            VpcOriginConfig:
+              VpcOriginId: vo_BE0O5HrJG2dFwrTMTCiYRQ
+              OriginReadTimeout: 30
+              OriginKeepaliveTimeout: 5
+            ConnectionAttempts: 3
+            ConnectionTimeout: 10
 
           # Recipe images stored in private S3
           - Id: MediaS3Origin
@@ -101,7 +110,7 @@ Resources:
               - EventType: viewer-request
                 FunctionARN: !GetAtt FrontendSpaRewriteFunction.FunctionARN
 
-        # Route Django API requests to EC2
+        # Route Django API requests through CloudFront VPC origin
         CacheBehaviors:
           - PathPattern: /media/*
             TargetOriginId: MediaS3Origin
@@ -121,7 +130,7 @@ Resources:
             CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
 
           - PathPattern: /api/*
-            TargetOriginId: DjangoAPIOrigin
+            TargetOriginId: PrivateDjangoAPIOrigin
             ViewerProtocolPolicy: redirect-to-https
 
             AllowedMethods:
