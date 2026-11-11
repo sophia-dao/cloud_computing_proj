@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useToast } from "../../../hooks/useToast";
-import { parseApiError } from "../utils/apiErrors";
+import { parseApiError } from "../../../utils/apiErrors";
 
 const IDLE = { status: "idle", message: "", fieldErrors: {} };
 
