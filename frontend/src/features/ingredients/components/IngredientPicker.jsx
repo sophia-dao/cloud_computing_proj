@@ -37,9 +37,10 @@ export default function IngredientPicker({
     const showList = open && isSearchable;
 
     function choose(ingredient) {
-        if (!ingredient || selectedIds.has(ingredient.id)) return;
+        if (!ingredient) return;
 
-        onAdd?.(ingredient);
+        // Picking an ingredient that's already selected just closes the list.
+        if (!selectedIds.has(ingredient.id)) onAdd?.(ingredient);
         setQuery("");
         setActiveIndex(-1);
         setOpen(false);
