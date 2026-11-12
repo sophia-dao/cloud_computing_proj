@@ -5,7 +5,7 @@ import RecipeCard from "../../components/recipes/RecipeCard/RecipeCard";
 import SearchBar from "../../components/common/SearchBar/SearchBar";
 import Spinner from "../../components/common/Spinner/Spinner";
 import Button from "../../components/common/Button/Button";
-import recipesApi from "../../services/RecipesApi";
+import recipesApi from "../../services/recipesApi";
 import allergensApi from "../../services/AllergensApi";
 import tagsApi from "../../services/TagsApi";
 import Select from "../../components/common/Select/Select";
