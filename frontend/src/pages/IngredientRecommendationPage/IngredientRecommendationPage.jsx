@@ -22,6 +22,16 @@ function toResults(data) {
     return [];
 }
 
+function describeError(error) {
+    const status = error?.status;
+    if (status === 404 || status >= 500) {
+        return "The recommendation service isn't available right now. Please try again later.";
+    }
+    if (status === 429) return "Too many requests. Please wait a moment and try again.";
+    // Validation (400) and connection errors carry a readable message.
+    return error?.message || "Unable to load recommendations.";
+}
+
 export default function IngredientRecommendationPage() {
     const { selected, selectedIds, add, remove, clear } = useIngredientSelection();
     const [matchMode, setMatchMode] = useState(MATCH_MODES.PARTIAL_MATCH);
@@ -61,7 +71,7 @@ export default function IngredientRecommendationPage() {
             setRequest({
                 status: "error",
                 results: [],
-                error: error?.message || "Unable to load recommendations.",
+                error: describeError(error),
             });
         }
     }
