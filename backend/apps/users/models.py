@@ -17,7 +17,17 @@ class User(models.Model):
         related_name="application_user",
     )
 
-    # Will be populated when Cognito integration is implemented.
+    # Cognito identity (Issue #68). A signed-in person is identified by the
+    # (cognito_issuer, cognito_subject) pair from their verified access token:
+    # the User Pool's URL plus Cognito's permanent ID for them ("sub").
+    # Email is never used to identify anyone. Both fields are empty for
+    # accounts that weren't created by Cognito sign-in.
+    cognito_issuer = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+    )
+    
     cognito_subject = models.CharField(
         max_length=255,
         unique=True,

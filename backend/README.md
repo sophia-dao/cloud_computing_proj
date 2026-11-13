@@ -520,6 +520,91 @@ A Registered User has all Guest functionality.
 
 An Administrator has all Registered User functionality plus administrative functionality.
 
+### Cognito Sign-In (Issue #68)
+
+The API accepts Amazon Cognito **access tokens**, sent by React as:
+
+```text
+Authorization: Bearer <access token>
+```
+
+On the deployed site, Cognito is the only way to sign in. A request without a token is a Guest request. (The Django admin site at `/admin/` keeps its own staff login; it is not part of the API.)
+
+#### Environment variables
+
+Values come from the project manager. Put real values in `.env`, never in Git. None of them are secrets.
+
+| Variable | Example | Meaning |
+| --- | --- | --- |
+| `COGNITO_REGION` | `us-east-1` | AWS region of the User Pool |
+| `COGNITO_USER_POOL_ID` | `us-east-1_AbC123xyz` | User Pool ID |
+| `COGNITO_APP_CLIENT_IDS` | `abc123,def456` | Comma-separated app client IDs whose tokens are accepted (the frontend's `VITE_COGNITO_CLIENT_ID`) |
+
+If any of them is missing, every bearer token is rejected with 401 and an error is logged. Guest endpoints keep working.
+
+#### Local development login shortcut
+
+To try logged-in pages without Cognito, set this in your local `.env`:
+
+```dotenv
+DJANGO_DEBUG=True
+DJANGO_DEV_BASIC_AUTH=True
+```
+
+The API then also accepts a Django username and password over HTTP Basic, which is what the frontend's `VITE_DEV_BASIC_AUTH` sends. Create the user with `python manage.py createsuperuser`.
+
+It is off unless you turn it on, and it is ignored whenever `DJANGO_DEBUG` is not `True`, so it can't work on the deployed server or during tests. Never set either variable to `True` in production.
+
+#### What is checked
+
+A token is accepted only if:
+
+- it is signed (RS256) by one of the User Pool's published keys (`<issuer>/.well-known/jwks.json`);
+- `iss` is `https://cognito-idp.<COGNITO_REGION>.amazonaws.com/<COGNITO_USER_POOL_ID>`;
+- it hasn't expired;
+- `token_use` is `access` (ID tokens are rejected);
+- `client_id` is in `COGNITO_APP_CLIENT_IDS`.
+
+Signing keys are cached per process and downloaded again when a token uses a new key ID, so Cognito key rotation needs no restart. Tokens are never logged.
+
+#### Users
+
+A person is identified by the token's issuer plus `sub`, stored as `User.cognito_issuer` and `User.cognito_subject`. Email is never used to identify or link accounts.
+
+The first request with a new identity creates the Django auth user (with no usable password), the application `User`, and an empty `UserProfile`. Admin rights come from `User.is_admin` in Django, not from Cognito groups.
+
+#### GET `/api/auth/me/`
+
+**Access:** User. Read-only. Returns the same body as `GET /api/users/me/`:
+
+```json
+{
+  "id": 15,
+  "email": "",
+  "display_name": "",
+  "profile_image": null,
+  "is_admin": false
+}
+```
+
+`email` is empty for accounts created by Cognito sign-in, because Cognito access tokens don't contain the email address. The frontend shows the ID token's email instead. `display_name` is changed with `PATCH /api/users/me/`.
+
+#### Errors
+
+| Status | When | `detail` |
+| --- | --- | --- |
+| 401 | No token on a protected endpoint | `Authentication credentials were not provided.` |
+| 401 | Expired token | `Token has expired.` |
+| 401 | Any other bad token (malformed, wrong signature, wrong issuer, wrong app client, ID token instead of access token), on any endpoint including public ones | `Invalid token.` |
+| 403 | Valid token, but the account is suspended or disabled | `This account is suspended or disabled.` |
+| 503 | Cognito's signing keys couldn't be downloaded | `Sign-in can't be checked right now. Please try again shortly.` |
+
+401 responses include `WWW-Authenticate: Bearer realm="api"`. The frontend refreshes the token once and retries on 401.
+
+#### Tests
+
+`apps/users/test_auth.py` and `tests/test_cognito_permissions.py` sign tokens with throwaway keys generated when the tests run and fake the JWKS download (`apps/users/testing.py`), so they never contact AWS. Other tests can keep using `force_authenticate`.
+
 ---
 
 ## Resource Ownership
