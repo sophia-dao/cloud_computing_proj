@@ -5,6 +5,7 @@ import { Link, useParams } from "react-router-dom";
 import recipesApi from "../../services/recipesApi";
 import Checkbox from "../../components/common/Checkbox/Checkbox";
 import Badge from "../../components/common/Badge/Badge";
+import { SaveRecipeButton } from "../../features/recipes";
 
 import "./RecipeDetailPage.css";
 
@@ -190,6 +191,8 @@ export default function RecipeDetailPage() {
                 {/* Recipe header */}
                 <header className="recipe-detail-header">
                     <h1>{recipe.name}</h1>
+
+                    <SaveRecipeButton recipeId={recipe.id} />
 
                     {recipe.tags?.length > 0 && (
                         <div className="recipe-detail-tags">

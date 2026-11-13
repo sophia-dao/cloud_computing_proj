@@ -14,6 +14,11 @@ export const navigationTabs = [
         access: "user",
     },
     {
+        label: "Saved",
+        path: "/saved-recipes",
+        access: "user",
+    },
+    {
         label: "Cook",
         path: "/cook",
     },

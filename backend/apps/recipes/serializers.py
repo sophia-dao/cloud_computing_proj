@@ -9,7 +9,7 @@ from rest_framework import serializers
 
 from apps.ingredients.models import Ingredient
 
-from .models import Recipe, RecipeIngredient, Tag
+from .models import Recipe, RecipeIngredient, SavedRecipe, Tag
 from .services import normalize_recipe_name
 
 # Same limit as the TheMealDB image import (backfill_recipe_images).
@@ -203,3 +203,22 @@ class RecipeImageSerializer(serializers.Serializer):
         # kept, and two uploads can't collide.
         file.name = f"{uuid.uuid4().hex}{ALLOWED_IMAGE_FORMATS[image_format]}"
         return file
+
+
+# ---------- Saved recipes (Issue #14) ----------
+
+class SavedRecipeSerializer(serializers.ModelSerializer):
+    """One bookmark: {"id", "recipe": {list shape}, "created_at"}.
+
+    Clients send {"recipe_id": 42}. The user always comes from authentication.
+    """
+
+    recipe = RecipeListSerializer(read_only=True)
+    recipe_id = serializers.PrimaryKeyRelatedField(
+        source="recipe", queryset=Recipe.objects.all(), write_only=True
+    )
+
+    class Meta:
+        model = SavedRecipe
+        fields = ["id", "recipe", "recipe_id", "created_at"]
+        read_only_fields = ["id", "created_at"]
