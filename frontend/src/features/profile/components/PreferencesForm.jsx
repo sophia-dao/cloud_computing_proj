@@ -1,9 +1,9 @@
-import { useState } from "react";
-
 import FormCard from "../../../components/common/FormCard/FormCard";
 import useSaveState from "../hooks/useSaveState";
 import OptionGroup from "./OptionGroup";
 import SectionFooter from "./SectionFooter";
+
+import { useState } from "react";
 
 const TYPE_ORDER = ["DIET", "CUISINE", "COST", "OTHER"];
 const TYPE_LABELS = {
@@ -55,10 +55,23 @@ export default function PreferencesForm({ tags, savedIds, onSave }) {
         save.run(() => onSave(selected), "Preferences saved.");
     }
 
+    async function handleClearPreferences() {
+        if (save.saving) return;
+
+        const result = await save.run(
+            () => onSave([]),
+            "Preferences cleared."
+        );
+
+        if (result.success) {
+            setSelected([]);
+        }
+    }
+
     return (
         <FormCard
             title="Preferences"
-            description="Choose the diets and cuisines you like. They shape your recipe recommendations."
+            description="Your saved preferences affect which recipes appear in your search results. To browse all recipes without preference restrictions, deselect all preferences and save your changes."
             onSubmit={handleSubmit}
             footer={
                 <SectionFooter
@@ -89,6 +102,14 @@ export default function PreferencesForm({ tags, savedIds, onSave }) {
                     disabled={save.saving}
                 />
             ))}
+
+            <button
+                type="button"
+                onClick={handleClearPreferences}
+                disabled={save.saving || savedIds.length === 0}
+            >
+                Clear saved preferences
+            </button>
         </FormCard>
     );
 }

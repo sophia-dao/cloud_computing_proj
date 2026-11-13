@@ -50,3 +50,23 @@
     margin: 0;
     color: var(--color-text-secondary);
 }
+
+.profile-settings__clear-preferences {
+    padding: 0.7rem 1rem;
+    border: 1px solid #a66b6b;
+    border-radius: 8px;
+    background: transparent;
+    color: #d99b9b;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.profile-settings__clear-preferences:hover:not(:disabled) {
+    background: rgba(166, 107, 107, 0.12);
+}
+
+.profile-settings__clear-preferences:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

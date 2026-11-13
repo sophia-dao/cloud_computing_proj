@@ -28,16 +28,19 @@ export default function useSaveState() {
             setState({ status: "saving", message: "", fieldErrors: {} });
 
             try {
-                await action();
+                const result = await action();
 
                 if (mounted.current) setState(IDLE);
                 showToast({ type: "success", message: successMessage });
+
+                return { success: true, data: result };
             } catch (error) {
                 const { message, fieldErrors } = parseApiError(error);
 
                 if (mounted.current) {
                     setState({ status: "error", message, fieldErrors });
                 }
+                return { success: false };
             }
         },
         [showToast]
