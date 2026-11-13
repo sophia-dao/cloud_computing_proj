@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import RecipeCard from "../../components/recipes/RecipeCard/RecipeCard";
 import SearchBar from "../../components/common/SearchBar/SearchBar";
@@ -11,10 +12,12 @@ import tagsApi from "../../services/TagsApi";
 import Select from "../../components/common/Select/Select";
 import MultiSelect from "../../components/common/MultiSelect/MultiSelect";
 import { buildTagOptions } from "../../utils/tagUtils";
+import { useAuth } from "../../hooks/useAuth";
 
 import "./RecipeSearchPage.css";
 
 export default function RecipeSearchPage() {
+    const { isAuthenticated } = useAuth();
     const [recipes, setRecipes] = useState([]);
     const [page, setPage] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
@@ -336,6 +339,18 @@ export default function RecipeSearchPage() {
                         {searchQuery || Object.values(filters).some(Boolean) || selectedAllergens.length > 0
                             ? "No recipes match your current search or filters. Try adjusting your criteria."
                             : "No recipes available."}
+                    </p>
+                    <p>
+                        Can&apos;t find what you&apos;re looking for?{" "}
+                        <Link
+                            to={
+                                searchQuery
+                                    ? `/add-recipe?${new URLSearchParams({ name: searchQuery })}`
+                                    : "/add-recipe"
+                            }
+                        >
+                            {isAuthenticated ? "Add your own recipe" : "Sign in to add a recipe"}
+                        </Link>
                     </p>
                 </div>
             ) : (

@@ -9,6 +9,11 @@ export const navigationTabs = [
         path: "/recipes",
     },
     {
+        label: "Add Recipe",
+        path: "/add-recipe",
+        access: "user",
+    },
+    {
         label: "Cook",
         path: "/cook",
     },

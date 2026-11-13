@@ -9,6 +9,7 @@ import UIDocsPage from "../pages/UIDocsPage/UIDocsPage";
 
 import RecipeSearchPage from "../pages/RecipeSearchPage/RecipeSearchPage";
 import RecipeDetailPage from "../pages/RecipeDetailPage/RecipeDetailPage";
+import RecipeCreatePage from "../pages/RecipeCreatePage/RecipeCreatePage";
 import IngredientRecommendationPage from "../pages/IngredientRecommendationPage/IngredientRecommendationPage";
 import DashboardPage from "../pages/DashboardPage/DashboardPage";
 import ProfilePage from "../pages/ProfilePage/ProfilePage";
@@ -33,6 +34,14 @@ const router = createBrowserRouter([
             {
                 path: "recipes/:id",
                 element: <RecipeDetailPage />,
+            },
+            {
+                path: "add-recipe",
+                element: (
+                    <ProtectedRoute>
+                        <RecipeCreatePage />
+                    </ProtectedRoute>
+                ),
             },
             {
                 path: "cook",

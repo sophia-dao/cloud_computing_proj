@@ -1,0 +1,95 @@
+.recipe-form__section {
+    display: grid;
+    gap: var(--spacing-4);
+}
+
+.recipe-form__section + .recipe-form__section {
+    padding-top: var(--spacing-4);
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+.recipe-form__times {
+    display: grid;
+    gap: var(--spacing-4);
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.recipe-form__duplicate {
+    padding: var(--spacing-3) var(--spacing-4);
+    border: 1px solid var(--color-warning);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-secondary);
+}
+
+.recipe-form__duplicate p,
+.recipe-form__duplicate ul {
+    margin: 0 0 var(--spacing-2);
+}
+
+.recipe-form__duplicate p:last-child {
+    margin-bottom: 0;
+}
+
+/* The ingredient rows below the picker replace its chip list. */
+.recipe-form .ingredient-picker__selection {
+    display: none;
+}
+
+.recipe-ingredients {
+    display: grid;
+    gap: var(--spacing-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.recipe-ingredients__row {
+    display: grid;
+    grid-template-columns: minmax(8rem, 1.5fr) minmax(5rem, 1fr) minmax(5rem, 1fr) auto auto;
+    gap: var(--spacing-3);
+    align-items: end;
+    padding: var(--spacing-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+}
+
+.recipe-ingredients__name {
+    align-self: center;
+    font-weight: 600;
+}
+
+.recipe-ingredients__error {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: var(--color-error);
+}
+
+.recipe-form__photo {
+    display: grid;
+    gap: var(--spacing-2);
+    justify-items: start;
+}
+
+.recipe-form__error {
+    margin: 0;
+    color: var(--color-error);
+}
+
+.recipe-form__footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-3);
+    align-items: center;
+    justify-content: flex-end;
+}
+
+@media (max-width: 640px) {
+    .recipe-ingredients__row {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .recipe-ingredients__name {
+        grid-column: 1 / -1;
+    }
+}
