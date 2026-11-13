@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import allergensApi from "../../../services/AllergensApi";
 import tagsApi from "../../../services/TagsApi";
 import userService from "../../../services/userService";
-import { parseApiError } from "../utils/apiErrors";
+import { parseApiError } from "../../../utils/apiErrors";
 
 const toList = (data) =>
     Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : [];

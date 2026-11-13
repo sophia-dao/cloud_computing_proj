@@ -31,7 +31,7 @@ export default function AllergiesForm({ allergens, savedIds, onSave }) {
     return (
         <FormCard
             title="Allergies"
-            description="Recipes containing these allergens are excluded from your recommendations."
+            description="Recipes with ingredients linked to these allergens are hidden from your recipe lists. Allergen data is still being verified, so always check each recipe's ingredients."
             onSubmit={handleSubmit}
             footer={
                 <SectionFooter

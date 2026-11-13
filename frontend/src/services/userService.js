@@ -1,34 +1,5 @@
 import apiClient from "./api/apiClient";
-
-/**
- * DEV-ONLY auth shim.
- *
- * The backend currently runs on DRF's default authentication
- * (session / HTTP Basic) and the frontend has no login flow yet.
- * To exercise the protected /users/me/ endpoints locally, set
- *
- *     VITE_DEV_BASIC_AUTH=username:password
- *
- * in frontend/.env.local. It is ignored in production builds
- * (import.meta.env.DEV is false there).
- *
- * TODO: remove once real authentication (Cognito) is wired in.
- */
-function withAuth(options = {}) {
-    const credentials = import.meta.env.DEV
-        ? import.meta.env.VITE_DEV_BASIC_AUTH
-        : null;
-
-    if (!credentials) return options;
-
-    const headers = new Headers(options.headers);
-
-    if (!headers.has("Authorization")) {
-        headers.set("Authorization", `Basic ${btoa(credentials)}`);
-    }
-
-    return { ...options, headers };
-}
+import withAuth from "./devAuth";
 
 const userService = {
     getCurrentUser({ signal } = {}) {
