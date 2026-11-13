@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import recipesApi from "../../services/RecipesApi";
+import recipesApi from "../../services/recipesApi";
 import Checkbox from "../../components/common/Checkbox/Checkbox";
 import Badge from "../../components/common/Badge/Badge";
 

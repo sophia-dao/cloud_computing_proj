@@ -1,0 +1,106 @@
+.recommendation-results__loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 3rem 1rem;
+    color: var(--color-text-secondary);
+}
+
+.recommendation-results__count {
+    margin: 0 0 1rem;
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+}
+
+.recommendation-results__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1.5rem;
+}
+
+.recommendation-card {
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.recommendation-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgb(0 0 0 / 0.08);
+}
+
+.recommendation-card__link {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    color: inherit;
+    text-decoration: none;
+}
+
+.recommendation-card__image {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 4 / 3;
+    background: var(--color-surface-secondary);
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+}
+
+.recommendation-card__image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.recommendation-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1.1rem 1.25rem 1.35rem;
+}
+
+.recommendation-card__score {
+    align-self: flex-start;
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--color-success) 15%, transparent);
+    color: var(--color-success);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.recommendation-card__title {
+    margin: 0;
+    color: var(--color-text);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 1.25rem;
+    line-height: 1.25;
+}
+
+.recommendation-card__ingredients {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
+
+.recommendation-card__ingredients-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.recommendation-card__ingredients--available .recommendation-card__ingredients-title {
+    color: var(--color-success);
+}
+
+.recommendation-card__ingredients--missing .recommendation-card__ingredients-title {
+    color: var(--color-warning);
+}
