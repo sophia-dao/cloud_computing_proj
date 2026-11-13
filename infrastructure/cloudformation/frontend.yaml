@@ -2,13 +2,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Recipe App React frontend hosting and Django API routing
 
-Parameters:
-  BackendOriginKey:
-    Type: String
-    NoEcho: true
-    MinLength: 32
-    Description: Private header value shared by CloudFront and Nginx
-
 Resources:
 
   # ============================================================
@@ -61,17 +54,6 @@ Resources:
             OriginAccessControlId: !GetAtt FrontendOAC.Id
             S3OriginConfig:
               OriginAccessIdentity: ""
-
-          # Original public EC2 backend — retained for rollback
-          - Id: DjangoAPIOrigin
-            DomainName: ec2-3-214-51-24.compute-1.amazonaws.com
-            CustomOriginConfig:
-              HTTPPort: 80
-              OriginProtocolPolicy: http-only
-              OriginReadTimeout: 30
-            OriginCustomHeaders:
-              - HeaderName: X-Recipe-Origin-Key
-                HeaderValue: !Ref BackendOriginKey
 
           # Private Django backend through CloudFront VPC origin
           - Id: PrivateDjangoAPIOrigin

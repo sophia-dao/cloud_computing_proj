@@ -2,21 +2,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Recipe Suggestion App - Django EC2 backend infrastructure
 
-Parameters:
-  InstanceType:
-    Type: String
-    Default: t3.micro
-    AllowedValues:
-      - t3.micro
-      - t3.small
-      - t3.medium
-    Description: EC2 instance size for the Django backend
-
-  LatestAmiId:
-    Type: AWS::EC2::Image::Id
-    Default: ami-097855b862d5b1eb2
-    Description: Pinned Amazon Linux 2023 AMI for the existing backend instance
-
 Resources:
 
   # ============================================================
@@ -133,75 +118,15 @@ Resources:
       Roles:
         - !Ref BackendInstanceRole
 
-  # ============================================================
-  # Backend EC2 Instance
-  # ============================================================
-
-  BackendInstance:
-    Type: AWS::EC2::Instance
-    Properties:
-      InstanceType: !Ref InstanceType
-      ImageId: !Ref LatestAmiId
-
-      SubnetId: !ImportValue RecipeApp-PublicSubnetAId
-
-      SecurityGroupIds:
-        - !Ref BackendSecurityGroup
-
-      IamInstanceProfile: !Ref BackendInstanceProfile
-
-      MetadataOptions:
-        HttpTokens: required
-        HttpEndpoint: enabled
-
-      BlockDeviceMappings:
-        - DeviceName: /dev/xvda
-          Ebs:
-            VolumeSize: 12
-            VolumeType: gp3
-            Encrypted: true
-            DeleteOnTermination: true
-
-      UserData:
-        Fn::Base64: |
-          #!/bin/bash
-          set -euxo pipefail
-
-          dnf update -y
-          dnf install -y docker
-
-          systemctl enable --now docker
-
-          mkdir -p /opt/recipe-app/data
-
-          echo "EC2 Docker setup completed" > /opt/recipe-app/setup-status.txt
-
-      Tags:
-        - Key: Name
-          Value: recipe-app-backend
-        - Key: Project
-          Value: RecipeSuggestionApp
-
 # ==============================================================
 # Outputs
 # ==============================================================
 
 Outputs:
-
-  InstanceId:
-    Description: Backend EC2 instance ID
-    Value: !Ref BackendInstance
-    Export:
-      Name: RecipeApp-BackendInstanceId
-
-  PublicIp:
-    Description: Public IPv4 address of backend EC2 instance
-    Value: !GetAtt BackendInstance.PublicIp
-
   SecurityGroupId:
     Description: Backend security group ID
     Value: !Ref BackendSecurityGroup
 
   InstanceRoleArn:
-    Description: IAM role ARN for the backend EC2 instance
+    Description: IAM role ARN for backend EC2 instances
     Value: !GetAtt BackendInstanceRole.Arn
