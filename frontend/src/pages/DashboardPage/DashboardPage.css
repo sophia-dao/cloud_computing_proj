@@ -1,0 +1,35 @@
+.dashboard-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-6, 1.5rem);
+    max-width: 48rem;
+    padding-bottom: var(--spacing-12, 3rem);
+}
+
+.dashboard-page h1 {
+    margin: 0;
+}
+
+.dashboard-page__center {
+    display: flex;
+    justify-content: center;
+    padding: var(--spacing-8, 2rem) 0;
+}
+
+.dashboard-page__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--spacing-3, 0.75rem);
+}
+
+.dashboard-page__link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
+
+.dashboard-page__footer {
+    margin: 0;
+}

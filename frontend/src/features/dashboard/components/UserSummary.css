@@ -1,0 +1,49 @@
+.user-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--spacing-4, 1rem);
+}
+
+.user-summary__avatar {
+    flex: none;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: var(--radius-full, 9999px);
+    object-fit: cover;
+}
+
+.user-summary__avatar--initial {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-primary);
+    color: var(--color-text-on-primary);
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.user-summary__text {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.user-summary__name {
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--color-text);
+}
+
+.user-summary__email {
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+}
+
+.user-summary__action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
