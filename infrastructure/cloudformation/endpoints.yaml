@@ -36,11 +36,6 @@ Resources:
           ToPort: 443
           CidrIp: 10.0.6.0/24
           Description: Private application subnet B
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 10.0.2.0/24
-          Description: Existing public backend EC2 subnet
       Tags:
         - Key: Name
           Value: recipe-app-vpc-endpoints

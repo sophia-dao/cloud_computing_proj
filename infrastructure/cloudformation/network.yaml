@@ -143,8 +143,9 @@ Resources:
         - Key: Project
           Value: RecipeSuggestionApp
 
-  # Application route tables intentionally have only the implicit local VPC route.
-  # Private AWS service access will be added using VPC endpoints in a later stack.
+  # Private application route tables use NAT for general outbound internet access.
+  # VPC endpoints provide private access to supported AWS services.
+  # Database subnets remain isolated without an internet default route.
   PrivateApplicationRouteTableA:
     Type: AWS::EC2::RouteTable
     Properties:
