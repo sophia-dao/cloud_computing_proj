@@ -1,0 +1,134 @@
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Cognito authentication for Recipe Suggestion App
+
+Parameters:
+  CognitoDomainPrefix:
+    Type: String
+    Description: Globally unique Cognito domain prefix
+    AllowedPattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+
+  CallbackURL:
+    Type: String
+    Description: React frontend OAuth callback URL
+
+  LogoutURL:
+    Type: String
+    Description: React frontend logout redirect URL
+
+Resources:
+
+  # ----------------------------------------
+  # Cognito User Pool
+  # ----------------------------------------
+  RecipeUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: recipe-app-users
+
+      UsernameAttributes:
+        - email
+
+      AutoVerifiedAttributes:
+        - email
+
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+
+      UserPoolAddOns:
+        AdvancedSecurityMode: "OFF"
+
+  # ----------------------------------------
+  # Google Identity Provider
+  # ----------------------------------------
+  RecipeGoogleIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref RecipeUserPool
+      ProviderName: Google
+      ProviderType: Google
+
+      ProviderDetails:
+        client_id: "{{resolve:secretsmanager:recipe-app/google-oauth:SecretString:client_id}}"
+        client_secret: "{{resolve:secretsmanager:recipe-app/google-oauth:SecretString:client_secret}}"
+        authorize_scopes: "openid email profile"
+
+      AttributeMapping:
+        email: email
+        username: sub
+
+  # ----------------------------------------
+  # React Frontend App Client
+  # ----------------------------------------
+  RecipeUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    DependsOn:
+      - RecipeGoogleIdentityProvider
+    Properties:
+      ClientName: recipe-app-frontend
+      UserPoolId: !Ref RecipeUserPool
+
+      # Public SPA client: no client secret
+      GenerateSecret: false
+
+      SupportedIdentityProviders:
+        - COGNITO
+        - Google
+
+      AllowedOAuthFlowsUserPoolClient: true
+
+      AllowedOAuthFlows:
+        - code
+
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+
+      CallbackURLs:
+        - !Ref CallbackURL
+
+      LogoutURLs:
+        - !Ref LogoutURL
+
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+
+      PreventUserExistenceErrors: ENABLED
+
+  # ----------------------------------------
+  # Cognito Managed Login Domain
+  # ----------------------------------------
+  RecipeUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Ref CognitoDomainPrefix
+      UserPoolId: !Ref RecipeUserPool
+
+Outputs:
+
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref RecipeUserPool
+
+  UserPoolClientId:
+    Description: React App Client ID
+    Value: !Ref RecipeUserPoolClient
+
+  CognitoDomain:
+    Description: Cognito managed login domain
+    Value: !Sub
+      - "https://${Prefix}.auth.${AWS::Region}.amazoncognito.com"
+      - Prefix: !Ref CognitoDomainPrefix
+
+  CognitoIssuer:
+    Description: JWT issuer URL
+    Value: !Sub
+      - "https://cognito-idp.${AWS::Region}.amazonaws.com/${PoolId}"
+      - PoolId: !Ref RecipeUserPool
