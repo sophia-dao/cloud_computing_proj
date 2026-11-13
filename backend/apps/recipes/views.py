@@ -1,6 +1,9 @@
 
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.response import Response
 
 from .filters import (
     apply_user_defaults,
@@ -10,7 +13,16 @@ from .filters import (
 )
 from .models import Recipe, Tag
 from .permissions import IsOwnerOrAdminOrReadOnly
-from .serializers import RecipeDetailSerializer, RecipeListSerializer, RecipeWriteSerializer, TagSerializer
+from .serializers import (
+    RecipeDetailSerializer,
+    RecipeImageSerializer,
+    RecipeListSerializer,
+    RecipeMatchSerializer,
+    RecipeNameCheckSerializer,
+    RecipeWriteSerializer,
+    TagSerializer,
+)
+from .services import find_recipes_with_same_name, normalize_recipe_name
 
 
 class RecipePagination(PageNumberPagination):
@@ -26,6 +38,10 @@ class RecipeViewSet(viewsets.ModelViewSet):
     POST   /api/recipes/        logged-in users; owner is the requester
     PATCH  /api/recipes/{id}/   owner or admin
     DELETE /api/recipes/{id}/   owner or admin
+
+    Recipe submission (Issue #67):
+    GET    /api/recipes/duplicates/?name=...  public; same-name recipes to warn about
+    POST   /api/recipes/{id}/image/           owner or admin; multipart "image" file
     """
 
     permission_classes = [IsOwnerOrAdminOrReadOnly]
@@ -57,6 +73,35 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
+
+    @action(detail=False, methods=["get"], url_path="duplicates")
+    def duplicates(self, request):
+        """Recipes with the same name as ?name=, ignoring case and extra spaces.
+
+        Only a warning for the Add Recipe form: creating a recipe with a
+        duplicate name is still allowed.
+        """
+        query = RecipeNameCheckSerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        name = normalize_recipe_name(query.validated_data["name"])
+        matches = find_recipes_with_same_name(name)
+        return Response({"name": name, "matches": RecipeMatchSerializer(matches, many=True).data})
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="image",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def upload_image(self, request, pk=None):
+        """Add or replace a recipe's image. Same owner/admin rule as editing."""
+        recipe = self.get_object()
+        upload = RecipeImageSerializer(data=request.data)
+        upload.is_valid(raise_exception=True)
+        recipe.image = upload.validated_data["image"]
+        recipe.save(update_fields=["image", "updated_at"])
+        recipe = Recipe.objects.with_detail_relations().get(pk=recipe.pk)
+        return Response(RecipeDetailSerializer(recipe, context=self.get_serializer_context()).data)
 
 class TagViewSet(viewsets.ReadOnlyModelViewSet):
     """

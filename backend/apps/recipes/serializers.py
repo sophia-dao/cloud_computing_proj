@@ -2,12 +2,20 @@
 Recipe API serializers. Response shapes follow docs/api-design.md section 19.
 """
 
+import uuid
+
 from django.db import transaction
 from rest_framework import serializers
 
 from apps.ingredients.models import Ingredient
 
 from .models import Recipe, RecipeIngredient, Tag
+from .services import normalize_recipe_name
+
+# Same limit as the TheMealDB image import (backfill_recipe_images).
+MAX_IMAGE_BYTES = 5_000_000
+# Pillow format name -> file extension used when storing the upload.
+ALLOWED_IMAGE_FORMATS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}
 
 
 class IngredientSummarySerializer(serializers.ModelSerializer):
@@ -112,6 +120,10 @@ class RecipeWriteSerializer(serializers.ModelSerializer):
             "tag_ids",
         ]
 
+    def validate_name(self, value):
+        # Stored normalized so the duplicate-name check can match exactly.
+        return normalize_recipe_name(value)
+
     def validate_ingredients(self, value):
         if not value:
             raise serializers.ValidationError("A recipe needs at least one ingredient.")
@@ -156,3 +168,38 @@ class RecipeWriteSerializer(serializers.ModelSerializer):
         # After a write, respond with the same shape as GET /api/recipes/{id}/.
         recipe = Recipe.objects.with_detail_relations().get(pk=recipe.pk)
         return RecipeDetailSerializer(recipe, context=self.context).data
+
+
+# ---------- Recipe submission helpers (Issue #67) ----------
+
+class RecipeNameCheckSerializer(serializers.Serializer):
+    """Query parameters for GET /api/recipes/duplicates/."""
+
+    name = serializers.CharField(max_length=200)
+
+
+class RecipeMatchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Recipe
+        fields = ["id", "name"]
+
+
+class RecipeImageSerializer(serializers.Serializer):
+    """Multipart body for POST /api/recipes/{id}/image/."""
+
+    # Django's ImageField opens the file with Pillow, so anything that isn't
+    # really an image is rejected even if its name ends in .jpg.
+    image = serializers.ImageField()
+
+    def validate_image(self, file):
+        if file.size > MAX_IMAGE_BYTES:
+            raise serializers.ValidationError(
+                f"Images must be {MAX_IMAGE_BYTES // 1_000_000} MB or smaller."
+            )
+        image_format = getattr(getattr(file, "image", None), "format", None)
+        if image_format not in ALLOWED_IMAGE_FORMATS:
+            raise serializers.ValidationError("Upload a JPEG, PNG or WebP image.")
+        # Store under a random name. The uploader's original filename is never
+        # kept, and two uploads can't collide.
+        file.name = f"{uuid.uuid4().hex}{ALLOWED_IMAGE_FORMATS[image_format]}"
+        return file

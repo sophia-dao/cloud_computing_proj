@@ -1,10 +1,23 @@
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 
 def is_admin(user):
-    # Django Admin access already depends on is_staff, so it doubles as the
-    # application's admin flag here.
-    return bool(user and user.is_authenticated and user.is_staff)
+    """Application admins may edit or delete any recipe (Issue #67).
+
+    That's an active application user with is_admin set, which is the same
+    flag GET /api/auth/me/ reports. Django staff (is_staff, who can use the
+    /admin/ site) still count as well.
+    """
+    if not (user and user.is_authenticated):
+        return False
+    if user.is_staff:
+        return True
+    try:
+        account = user.application_user
+    except ObjectDoesNotExist:
+        return False
+    return account.is_admin and account.account_status == account.AccountStatus.ACTIVE
 
 
 class IsOwnerOrAdminOrReadOnly(BasePermission):
