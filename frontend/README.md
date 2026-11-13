@@ -596,7 +596,7 @@ Use an environment variable and the shared API service layer.
 For example:
 
 ```text
-VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_API_BASE_URL=http://127.0.0.1:8000/api
 ```
 
 Then API services can build requests from the configured base URL.
@@ -724,10 +724,45 @@ A committed `.env.example` should document required variables without containing
 Example:
 
 ```text
-VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_API_BASE_URL=http://127.0.0.1:8000/api
 ```
 
-Additional Cognito/AWS configuration may be added when authentication is implemented.
+### Cognito sign-in configuration
+
+Authentication uses Cognito managed login (Hosted UI) with the OAuth 2.0
+Authorization Code flow + PKCE. No extra npm dependency is used: see
+`src/features/auth/`.
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `VITE_COGNITO_DOMAIN` | Yes | Cognito domain, e.g. `https://<prefix>.auth.<region>.amazoncognito.com` |
+| `VITE_COGNITO_CLIENT_ID` | Yes | Public app client ID (no client secret) |
+| `VITE_COGNITO_REDIRECT_URI` | No | Defaults to `<origin>/auth/callback` |
+| `VITE_COGNITO_LOGOUT_URI` | No | Defaults to `<origin>/` |
+| `VITE_COGNITO_SCOPES` | No | Defaults to `openid email profile` |
+| `VITE_COGNITO_GOOGLE_PROVIDER` | No | Identity provider name in the User Pool, defaults to `Google` |
+
+Cognito app client settings (project manager / AWS console):
+
+- App type: public client, **no client secret**.
+- OAuth grant: Authorization code grant. Scopes: `openid`, `email`, `profile`.
+- Identity providers: Cognito user pool and Google.
+- Allowed callback URLs: `http://localhost:5173/auth/callback` and `https://<cloudfront-domain>/auth/callback`.
+- Allowed sign-out URLs: `http://localhost:5173/` and `https://<cloudfront-domain>/`.
+
+Production routing: the CloudFront SPA rewrite function serves `index.html`
+for extensionless, non-`/api` paths, so `/auth/callback?code=...` reaches the
+React router with its query string intact. No CloudFront change is needed.
+
+How it works:
+
+- `/login` offers Continue with Google (`identity_provider=Google`), email sign-in and sign-up (`/signup`).
+- `/auth/callback` validates the one-time `state`, exchanges the code with the PKCE verifier, removes the code from the URL and returns to the original page (same-origin paths only).
+- Tokens live in `sessionStorage` (survive refresh, cleared when the tab closes) and are never placed in URLs or logs.
+- `apiClient` attaches `Authorization: Bearer <access token>` to API calls, refreshes the token before expiry, and on a `401` refreshes once and retries. If the session can't be refreshed it is cleared, the user sees a "session expired" message, and public requests are retried as a guest.
+- After sign-in the app calls `GET /api/auth/me/` (backend issue #68) for the current user.
+- `/dashboard` and `/profile` are protected client-side; recipes stay public. Django remains the authorization boundary.
+- Sign out clears local state and redirects to Cognito `/logout`.
 
 Only configuration intended to be publicly available to browser code should use Vite frontend environment variables.
 

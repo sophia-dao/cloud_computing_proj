@@ -10,6 +10,7 @@ function Header({
     tabs = [],
     logo = null,
     title = "Recipe Suggestion",
+    actions = null,
 })  {
     const [menuOpen, setMenuOpen] = useState(false);
 
@@ -64,6 +65,7 @@ function Header({
                         aria-label="Main navigation"
                     >
                         {renderTabs()}
+                        {actions}
                         <ThemeToggle />
                     </nav>
 
@@ -91,6 +93,12 @@ function Header({
                 <nav aria-label="Mobile navigation">
                     {renderTabs(true)}
                 </nav>
+
+                {actions && (
+                    <div className="site-header__mobile-footer">
+                        {actions}
+                    </div>
+                )}
 
                 <div className="site-header__mobile-footer">
                     <span>Appearance</span>

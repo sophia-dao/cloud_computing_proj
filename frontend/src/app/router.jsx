@@ -13,6 +13,8 @@ import IngredientRecommendationPage from "../pages/IngredientRecommendationPage/
 import DashboardPage from "../pages/DashboardPage/DashboardPage";
 import ProfilePage from "../pages/ProfilePage/ProfilePage";
 import LoginPage from "../pages/LoginPage/LoginPage";
+import AuthCallbackPage from "../pages/AuthCallbackPage/AuthCallbackPage";
+import ProtectedRoute from "../features/auth/ProtectedRoute";
 
 const router = createBrowserRouter([
     {
@@ -38,15 +40,27 @@ const router = createBrowserRouter([
             },
             {
                 path: "dashboard",
-                element: <DashboardPage />,
+                element: (
+                    <ProtectedRoute>
+                        <DashboardPage />
+                    </ProtectedRoute>
+                ),
             },
             {
                 path: "profile",
-                element: <ProfilePage />,
+                element: (
+                    <ProtectedRoute>
+                        <ProfilePage />
+                    </ProtectedRoute>
+                ),
             },
             {
                 path: "login",
                 element: <LoginPage />,
+            },
+            {
+                path: "auth/callback",
+                element: <AuthCallbackPage />,
             },
             {
                 path: "ui-docs",

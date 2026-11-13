@@ -13,8 +13,30 @@ export class ApiError extends Error {
     }
 }
 
+/*
+ * Authentication hook. The auth feature registers a provider so this client
+ * can attach `Authorization: Bearer <access token>` without depending on it.
+ *   provider.getToken({ forceRefresh }) -> Promise<string | null>
+ */
+let authTokenProvider = null;
+
+export function setAuthTokenProvider(provider) {
+    authTokenProvider = provider;
+}
+
+async function getToken(options) {
+    if (!authTokenProvider) return null;
+
+    try {
+        return await authTokenProvider.getToken(options);
+    } catch {
+        return null;
+    }
+}
+
 async function request(endpoint, options = {}) {
-    const { headers: customHeaders, ...fetchOptions } = options;
+    // `auth: false` skips the bearer token (e.g. for third-party URLs).
+    const { headers: customHeaders, auth = true, ...fetchOptions } = options;
 
     const headers = new Headers(customHeaders);
 
@@ -23,11 +45,26 @@ async function request(endpoint, options = {}) {
     }
 
     try {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-            cache: "no-store",
-            ...fetchOptions,
-            headers,
-        });
+        const send = async (token) => {
+            if (token) headers.set("Authorization", `Bearer ${token}`);
+            else headers.delete("Authorization");
+
+            return fetch(`${API_BASE_URL}${endpoint}`, {
+                cache: "no-store",
+                ...fetchOptions,
+                headers,
+            });
+        };
+
+        const token = auth ? await getToken() : null;
+        let response = await send(token);
+
+        // A rejected token: refresh once and retry. If the session can't be
+        // refreshed, retry as a guest so public endpoints keep working.
+        if (response.status === 401 && token) {
+            const refreshed = await getToken({ forceRefresh: true });
+            response = await send(refreshed);
+        }
 
         const contentType = response.headers.get("content-type") || "";
 
