@@ -23,11 +23,6 @@ export const navigationTabs = [
         access: "user",
     },
     {
-        label: "Profile",
-        path: "/profile",
-        access: "user",
-    },
-    {
         label: "Login",
         path: "/login",
         access: "guest",

@@ -13,11 +13,18 @@ import Select from "../../components/common/Select/Select";
 import MultiSelect from "../../components/common/MultiSelect/MultiSelect";
 import { buildTagOptions } from "../../utils/tagUtils";
 import { useAuth } from "../../hooks/useAuth";
+import userService from "../../services/userService";
 
 import "./RecipeSearchPage.css";
 
 export default function RecipeSearchPage() {
     const { isAuthenticated } = useAuth();
+
+    const [savedPreferences, setSavedPreferences] = useState([]);
+    const [preferencesLoading, setPreferencesLoading] = useState(true);
+    const [preferencesError, setPreferencesError] = useState("");
+    const [clearingPreferences, setClearingPreferences] = useState(false);
+
     const [recipes, setRecipes] = useState([]);
     const [page, setPage] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
@@ -64,6 +71,39 @@ export default function RecipeSearchPage() {
         label: allergen.name,
         value: allergen.name,
     }));
+
+    useEffect(() => {
+        if (!isAuthenticated) return;
+
+        const controller = new AbortController();
+
+        async function loadPreferences() {
+            try {
+                const preferences = await userService.getPreferences({
+                    signal: controller.signal,
+                });
+
+                if (!controller.signal.aborted) {
+                    setSavedPreferences(preferences);
+                    setPreferencesError("");
+                }
+            } catch (error) {
+                if (!controller.signal.aborted) {
+                    setPreferencesError(
+                        error.message || "Unable to load saved preferences."
+                    );
+                }
+            } finally {
+                if (!controller.signal.aborted) {
+                    setPreferencesLoading(false);
+                }
+            }
+        }
+
+        loadPreferences();
+
+        return () => controller.abort();
+    }, [isAuthenticated]);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -140,6 +180,30 @@ export default function RecipeSearchPage() {
 
         setSelectedAllergens([]);
         setPage(1);
+    }
+
+    async function clearSavedPreferences() {
+        if (clearingPreferences) return;
+
+        setClearingPreferences(true);
+        setPreferencesError("");
+
+        try {
+            const updatedPreferences =
+                await userService.updatePreferences([]);
+
+            setSavedPreferences(updatedPreferences);
+
+            // Return to the first page and reload recipes.
+            setPage(1);
+            setRetryKey((key) => key + 1);
+        } catch (error) {
+            setPreferencesError(
+                error.message || "Unable to clear saved preferences."
+            );
+        } finally {
+            setClearingPreferences(false);
+        }
     }
 
     const handleSearch = (value) => {
@@ -312,6 +376,40 @@ export default function RecipeSearchPage() {
                 </p>
             </div>
 
+            {isAuthenticated && !preferencesLoading && savedPreferences.length > 0 && (
+                <div className="recipe-search-page__preference-notice">
+                    <div className="recipe-search-page__preference-info">
+                        <strong>Personalized recipe results</strong>
+                        <p>
+                            Your saved preferences are filtering the recipes shown.
+                            Clear them to browse all recipes.
+                        </p>
+                    </div>
+
+                    <div className="recipe-search-page__preference-actions">
+                        <Button
+                            variant="secondary"
+                            onClick={clearSavedPreferences}
+                            disabled={clearingPreferences}
+                        >
+                            {clearingPreferences
+                                ? "Clearing..."
+                                : "Clear saved preferences"}
+                        </Button>
+
+                        <Link to="/profile">
+                            Manage preferences
+                        </Link>
+                    </div>
+                </div>
+            )}
+
+            {isAuthenticated && preferencesError && (
+                <p className="recipe-search-page__filter-status" role="alert">
+                    {preferencesError}
+                </p>
+            )}
+
             <div className="recipe-search-page__results-header">
                 <h2>Explore recipes</h2>
 
@@ -321,6 +419,20 @@ export default function RecipeSearchPage() {
                     </span>
                 )}
             </div>
+
+            {isAuthenticated && (
+                <div className="recipe-search-page__preference-notice">
+                    <p>
+                        <strong>Personalized results:</strong>{" "}
+                        Your saved preferences may limit the recipes shown.
+                        To browse all recipes, clear your saved preferences
+                        in your profile.
+                    </p>
+                    <Link to="/profile">
+                        Manage preferences
+                    </Link>
+                </div>
+            )}
 
             {loading ? (
                 <div className="recipe-search-page__status">
