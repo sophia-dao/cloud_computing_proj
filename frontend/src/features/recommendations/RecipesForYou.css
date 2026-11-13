@@ -56,3 +56,22 @@
         grid-template-columns: minmax(0, 1fr);
     }
 }
+
+/* Recommendation match line under each card (Recipes for You, #6). */
+.recipes-for-you__item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.recipes-for-you__match {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.recipes-for-you__missing {
+    display: block;
+    font-weight: 400;
+    opacity: 0.75;
+}

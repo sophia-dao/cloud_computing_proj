@@ -6,19 +6,41 @@ import userService from "../../../services/userService";
 import { parseApiError } from "../../../utils/apiErrors";
 
 /**
- * Homepage recipe feed.
+ * Homepage recipe feed. `source` says where the recipes came from:
  *
- * - Signed in with saved preferences -> personalized recipes.
- * - Signed in without preferences, guests, or if the user lookup fails
- *   for any other reason -> general recipes (guests can always browse).
+ * - "ingredients":  signed in, and some recipes use their saved ingredients
+ *                   (POST /api/recommendations/).
+ * - "preferences":  signed in, nothing matches their ingredients yet (e.g. none
+ *                   saved), but they have saved preferences -> recipe list
+ *                   filtered by those preferences.
+ * - "general":      signed in without either, or a guest -> general recipes
+ *                   (guests can always browse).
  */
+async function loadForSignedInUser(options) {
+    const [preferences, matched] = await Promise.all([
+        userService.getPreferences(options),
+        recommendationsService.getRecommendationsForUser(options),
+    ]);
+
+    if (matched.length > 0) {
+        return { recipes: matched, source: "ingredients" };
+    }
+
+    const recipes = await recommendationsService.getRecipesForUser(options);
+
+    return {
+        recipes,
+        source: preferences.length > 0 ? "preferences" : "general",
+    };
+}
+
 export default function useRecipesForYou() {
     const user = useCurrentUser();
     const [reloadKey, setReloadKey] = useState(0);
     const [result, setResult] = useState({
         key: "",
         recipes: [],
-        personalized: false,
+        source: "general",
         error: null,
     });
 
@@ -32,16 +54,10 @@ export default function useRecipesForYou() {
         const options = { signal: controller.signal };
 
         const load = authenticated
-            ? Promise.all([
-                  userService.getPreferences(options),
-                  recommendationsService.getRecipesForUser(options),
-              ]).then(([preferences, recipes]) => ({
-                  recipes,
-                  personalized: preferences.length > 0,
-              }))
+            ? loadForSignedInUser(options)
             : recommendationsService
                   .getGeneralRecipes(options)
-                  .then((recipes) => ({ recipes, personalized: false }));
+                  .then((recipes) => ({ recipes, source: "general" }));
 
         load.then((loaded) => {
             if (controller.signal.aborted) return;
@@ -55,7 +71,7 @@ export default function useRecipesForYou() {
             setResult({
                 key: requestKey,
                 recipes: [],
-                personalized: false,
+                source: "general",
                 error: parseApiError(error).message,
             });
         });
@@ -68,7 +84,7 @@ export default function useRecipesForYou() {
     return {
         loading: user.status === "loading" || result.key !== requestKey,
         authenticated,
-        personalized: result.personalized,
+        source: result.source,
         recipes: result.recipes,
         error: result.error,
         reload,

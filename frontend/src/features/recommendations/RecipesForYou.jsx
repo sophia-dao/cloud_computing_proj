@@ -10,12 +10,29 @@ import "./RecipesForYou.css";
 
 const LINK_BUTTON = "recipes-for-you__link ui-button ui-button--md";
 
-function Intro({ authenticated, personalized }) {
-    if (personalized) {
+const MAX_MISSING_SHOWN = 3;
+
+function Intro({ authenticated, source }) {
+    if (source === "ingredients") {
         return (
             <>
                 <h2 id="recipes-for-you-title">Recipes for You</h2>
-                <p>Picked using your saved preferences.</p>
+                <p>
+                    Recipes that use the ingredients you&apos;ve saved, best
+                    matches first.
+                </p>
+            </>
+        );
+    }
+
+    if (source === "preferences") {
+        return (
+            <>
+                <h2 id="recipes-for-you-title">Recipes for You</h2>
+                <p>
+                    Picked using your saved preferences. Save the ingredients
+                    you have on your dashboard to see what you can make.
+                </p>
             </>
         );
     }
@@ -25,7 +42,8 @@ function Intro({ authenticated, personalized }) {
             <>
                 <h2 id="recipes-for-you-title">Popular recipes</h2>
                 <p>
-                    <Link to="/profile">Add your preferences</Link> to get
+                    Save the ingredients you have on your dashboard, or{" "}
+                    <Link to="/profile">add your preferences</Link>, to get
                     recipes picked for you.
                 </p>
             </>
@@ -43,8 +61,31 @@ function Intro({ authenticated, personalized }) {
     );
 }
 
+function MatchSummary({ match }) {
+    const { have, total, missing } = match;
+
+    if (missing.length === 0) {
+        return (
+            <p className="recipes-for-you__match">You have every ingredient</p>
+        );
+    }
+
+    const shown = missing.slice(0, MAX_MISSING_SHOWN);
+    const more = missing.length - shown.length;
+
+    return (
+        <p className="recipes-for-you__match">
+            You have {have} of {total} ingredients
+            <span className="recipes-for-you__missing">
+                Missing: {shown.join(", ")}
+                {more > 0 && ` +${more} more`}
+            </span>
+        </p>
+    );
+}
+
 export default function RecipesForYou() {
-    const { loading, authenticated, personalized, recipes, error, reload } =
+    const { loading, authenticated, source, recipes, error, reload } =
         useRecipesForYou();
 
     let body;
@@ -89,9 +130,16 @@ export default function RecipesForYou() {
         body = (
             <>
                 <div className="recipes-for-you__grid">
-                    {recipes.map((recipe) => (
-                        <RecipeCard key={recipe.id} recipe={recipe} />
-                    ))}
+                    {recipes.map((recipe) =>
+                        recipe.match ? (
+                            <div key={recipe.id} className="recipes-for-you__item">
+                                <RecipeCard recipe={recipe} />
+                                <MatchSummary match={recipe.match} />
+                            </div>
+                        ) : (
+                            <RecipeCard key={recipe.id} recipe={recipe} />
+                        )
+                    )}
                 </div>
 
                 <div className="recipes-for-you__more">
@@ -112,10 +160,7 @@ export default function RecipesForYou() {
                 {loading ? (
                     <h2 id="recipes-for-you-title">Recipes</h2>
                 ) : (
-                    <Intro
-                        authenticated={authenticated}
-                        personalized={personalized}
-                    />
+                    <Intro authenticated={authenticated} source={source} />
                 )}
             </header>
 
