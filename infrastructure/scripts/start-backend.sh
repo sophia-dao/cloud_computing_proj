@@ -56,6 +56,9 @@ settings = {
     "AWS_MEDIA_BUCKET_NAME": "recipe-app-media-mediabucket-w0ts6zix1yiu",
     "AWS_MEDIA_CLOUDFRONT_DOMAIN": "d1q0iv2raorz8j.cloudfront.net",
     "AWS_REGION": "us-east-1",
+    "COGNITO_REGION": "us-east-1",
+    "COGNITO_USER_POOL_ID": "us-east-1_hytPrxRdW",
+    "COGNITO_APP_CLIENT_IDS": "161mgfhhih066qb77uout7jt57",
 }
 
 def docker_env_value(value):

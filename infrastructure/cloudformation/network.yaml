@@ -73,6 +73,45 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
+  
+  # ============================================================
+  # NAT Gateway - Outbound internet for private application EC2
+  # ============================================================
+
+  NatGatewayElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: recipe-app-nat-eip
+
+  ApplicationNatGateway:
+    Type: AWS::EC2::NatGateway
+    DependsOn:
+      - InternetGatewayAttachment
+      - PublicDefaultRoute
+    Properties:
+      AllocationId: !GetAtt NatGatewayElasticIP.AllocationId
+      SubnetId: !Ref PublicSubnetA
+      ConnectivityType: public
+      Tags:
+        - Key: Name
+          Value: recipe-app-nat-gateway
+
+  PrivateApplicationDefaultRouteA:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateApplicationRouteTableA
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref ApplicationNatGateway
+
+  PrivateApplicationDefaultRouteB:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateApplicationRouteTableB
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref ApplicationNatGateway
 
   # ============================================================
   # Private Application Subnets (two Availability Zones)
