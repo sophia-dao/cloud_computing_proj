@@ -244,3 +244,26 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
 ]
+
+# Authentication (Issue #68): the API accepts Amazon Cognito access tokens
+# ("Authorization: Bearer <token>"). No token = guest.
+# DevBasicAuthentication is a local-only login shortcut (see README). It does
+# nothing unless DJANGO_DEBUG and DJANGO_DEV_BASIC_AUTH are both True.
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "apps.users.authentication.CognitoAccessTokenAuthentication",
+        "apps.users.authentication.DevBasicAuthentication",
+    ],
+}
+
+DEV_BASIC_AUTH = os.environ.get("DJANGO_DEV_BASIC_AUTH", "False").lower() == "true"
+
+# Cognito User Pool settings from .env. If any is missing, tokens are
+# rejected and guest endpoints keep working.
+COGNITO_REGION = os.environ.get("COGNITO_REGION", "").strip()
+COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "").strip()
+COGNITO_APP_CLIENT_IDS = [
+    client_id.strip()
+    for client_id in os.environ.get("COGNITO_APP_CLIENT_IDS", "").split(",")
+    if client_id.strip()
+]
