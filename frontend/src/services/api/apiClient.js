@@ -40,7 +40,12 @@ async function request(endpoint, options = {}) {
 
     const headers = new Headers(customHeaders);
 
-    if (fetchOptions.body != null && !headers.has("Content-Type")) {
+    // FormData (file uploads) must keep the multipart Content-Type the
+    // browser generates, so only plain bodies are labelled as JSON.
+    const isFormData =
+        typeof FormData !== "undefined" && fetchOptions.body instanceof FormData;
+
+    if (fetchOptions.body != null && !isFormData && !headers.has("Content-Type")) {
         headers.set("Content-Type", "application/json");
     }
 
@@ -138,6 +143,15 @@ const apiClient = {
             ...options,
             method: "PATCH",
             body: JSON.stringify(data),
+        });
+    },
+
+    /** multipart/form-data upload, e.g. a recipe image. */
+    postForm(endpoint, formData, options = {}) {
+        return request(endpoint, {
+            ...options,
+            method: "POST",
+            body: formData,
         });
     },
 

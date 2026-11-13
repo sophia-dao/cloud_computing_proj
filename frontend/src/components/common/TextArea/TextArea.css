@@ -1,0 +1,8 @@
+/* Builds on Input.css: only what differs for multi-line text. */
+.ui-textarea__control {
+    height: auto;
+    min-height: 6rem;
+    resize: vertical;
+    font: inherit;
+    line-height: 1.5;
+}
