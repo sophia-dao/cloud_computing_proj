@@ -33,7 +33,6 @@ export default function UserSummary({ user }) {
 
                 <div className="user-summary__text">
                     <h2 className="user-summary__name">Hi, {name}</h2>
-                    <p className="user-summary__email">{user.email}</p>
                 </div>
 
                 <Link
