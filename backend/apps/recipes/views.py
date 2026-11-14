@@ -1,8 +1,10 @@
 
-from rest_framework import viewsets
+from rest_framework import mixins, status, viewsets
+from rest_framework.exceptions import ValidationError
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .filters import (
@@ -11,7 +13,7 @@ from .filters import (
     get_request_application_user,
     parse_recipe_filters,
 )
-from .models import Recipe, Tag
+from .models import Recipe, SavedRecipe, Tag
 from .permissions import IsOwnerOrAdminOrReadOnly
 from .serializers import (
     RecipeDetailSerializer,
@@ -20,6 +22,7 @@ from .serializers import (
     RecipeMatchSerializer,
     RecipeNameCheckSerializer,
     RecipeWriteSerializer,
+    SavedRecipeSerializer,
     TagSerializer,
 )
 from .services import find_recipes_with_same_name, normalize_recipe_name
@@ -113,3 +116,48 @@ class TagViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = TagSerializer
     permission_classes = []
     pagination_class = None
+
+
+class SavedRecipeViewSet(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Saved recipes (Issue #14). Signed-in users only, each sees only their own.
+
+    GET    /api/saved-recipes/                your saved recipes, newest first (paginated)
+    GET    /api/saved-recipes/?recipe_id=42   is recipe 42 saved? (0 or 1 result)
+    POST   /api/saved-recipes/                {"recipe_id": 42}; 201, or 200 if already saved
+    DELETE /api/saved-recipes/{id}/           unsave; someone else's bookmark is a 404
+    """
+
+    serializer_class = SavedRecipeSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = RecipePagination
+
+    def get_queryset(self):
+        # Always scoped to the requester, so other users' bookmarks can't be
+        # listed or deleted. They simply don't exist from this user's view.
+        saved = SavedRecipe.objects.filter(user=self.request.user)
+        if self.action == "list":
+            saved = saved.select_related("recipe").prefetch_related("recipe__tags")
+            recipe_id = self.request.query_params.get("recipe_id")
+            if recipe_id is not None:
+                if not recipe_id.isdigit():
+                    raise ValidationError({"recipe_id": ["Must be a recipe ID."]})
+                saved = saved.filter(recipe_id=int(recipe_id))
+        return saved
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        # get_or_create also copes with two saves arriving at once: the unique
+        # constraint stops the second insert and the existing row is returned.
+        saved, created = SavedRecipe.objects.get_or_create(
+            user=request.user, recipe=serializer.validated_data["recipe"]
+        )
+        return Response(
+            self.get_serializer(saved).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )

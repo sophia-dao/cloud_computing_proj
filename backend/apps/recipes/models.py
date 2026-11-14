@@ -138,3 +138,38 @@ class RecipeIngredient(models.Model):
 
     def __str__(self):
         return f"{self.ingredient} in {self.recipe}"
+
+
+class SavedRecipe(models.Model):
+    """A recipe a signed-in user bookmarked (Issue #14).
+
+    Belongs to the Django auth user, like InventoryItem and Recipe.owner, so
+    ownership always comes straight from request.user.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="saved_recipes",
+        # The (user, recipe) unique constraint below already creates an index
+        # that starts with user_id, so a separate one would be redundant.
+        db_index=False,
+    )
+    recipe = models.ForeignKey(
+        Recipe,
+        # A deleted recipe disappears from everyone's saved list.
+        on_delete=models.CASCADE,
+        related_name="saved_by",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Newest first; id breaks ties so pagination is stable.
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            # database-design.md: UNIQUE(user_id, recipe_id). No duplicate bookmarks.
+            models.UniqueConstraint(fields=["user", "recipe"], name="unique_saved_recipe"),
+        ]
+
+    def __str__(self):
+        return f"{self.user} saved {self.recipe}"
