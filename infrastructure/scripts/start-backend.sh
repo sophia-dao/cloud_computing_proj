@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REGION="us-east-1"
-IMAGE="362176666546.dkr.ecr.us-east-1.amazonaws.com/recipe-app-backend:cognito-v1"
+IMAGE="362176666546.dkr.ecr.us-east-1.amazonaws.com/recipe-app-backend:final-v1"
 REGISTRY="362176666546.dkr.ecr.us-east-1.amazonaws.com"
 
 DJANGO_SECRET_ARN="arn:aws:secretsmanager:us-east-1:362176666546:secret:recipe-app/production/django-oEYU9L"
