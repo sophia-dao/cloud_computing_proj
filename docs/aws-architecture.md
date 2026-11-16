@@ -1,1683 +1,312 @@
-# AWS Architecture
+# AWS Architecture — Recipe Suggestion App
 
-## 1. Purpose
+## 1. Overview
 
-This document describes the AWS cloud architecture for the Recipe Suggestion App.
+The Recipe Suggestion App is deployed on Amazon Web Services (AWS) using a multi-tier cloud architecture. The infrastructure separates frontend delivery, backend computing, database storage, authentication, and application media.
 
-The architecture supports:
+The application uses Amazon CloudFront as its public entry point, while backend EC2 instances and the PostgreSQL database operate within private subnets.
 
-- React frontend hosting.
-- Django REST Framework backend hosting.
-- Docker-based backend deployment.
-- PostgreSQL relational data storage.
-- Persistent media storage.
-- Amazon Cognito authentication.
-- Docker image storage.
-- Secret management.
-- Application logging and monitoring.
-- Future horizontal scaling.
+Infrastructure resources are provisioned and managed using AWS CloudFormation.
 
-The initial architecture prioritizes simplicity and practical implementation for the current project while preserving a clear path toward future scalability.
-
----
-
-# 2. AWS Service Summary
-
-The initial architecture uses the following AWS services:
+## 2. AWS Services
 
 | AWS Service | Purpose |
-| --- | --- |
-| Amazon S3 | React static files and application media |
-| Amazon CloudFront | Frontend content delivery |
-| Amazon EC2 | Django REST backend hosting |
-| Amazon ECR | Docker image storage |
-| Amazon RDS for PostgreSQL | Persistent relational database |
-| Amazon Cognito | User authentication |
-| AWS Secrets Manager | Sensitive configuration and credentials |
-| Amazon CloudWatch | Logging and monitoring |
-| Amazon VPC | Network isolation and security boundaries |
+|---|---|
+| Amazon CloudFront | Public HTTPS entry point for frontend and API requests |
+| Amazon S3 | Private frontend assets and recipe image storage |
+| Amazon EC2 | Runs the Dockerized Django backend |
+| EC2 Auto Scaling | Manages backend instances across Availability Zones |
+| Application Load Balancer | Distributes API requests across backend instances |
+| Amazon ECR | Stores backend Docker images |
+| Amazon RDS | Hosts the PostgreSQL production database |
+| Amazon Cognito | Provides user authentication and Google Sign-In |
+| Amazon VPC | Provides isolated networking and private subnets |
+| VPC Endpoints | Provides private access to supported AWS services |
+| AWS Secrets Manager | Stores sensitive application configuration |
+| AWS Systems Manager | Provides EC2 management through Session Manager |
+| Amazon CloudWatch | Provides infrastructure metrics and logging capabilities |
+| AWS CloudFormation | Defines and deploys infrastructure resources |
 
-The initial deployment does not require:
+## 3. High-Level Architecture
 
-- Application Load Balancer.
-- EC2 Auto Scaling Group.
-- Multiple Django backend instances.
-- Multi-region deployment.
-- Microservices.
-
-These may be introduced later if application traffic or availability requirements increase.
-
----
-
-# 3. High-Level AWS Architecture
-
-The initial cloud architecture is:
+The production architecture uses CloudFront to route frontend and API requests to separate origins.
 
 ```text
                          Users
-                           │
-                           ▼
+                           |
+                           | HTTPS
+                           v
                     Amazon CloudFront
-                           │
-                           ▼
-                       Amazon S3
-                    React Frontend
-                           │
-                           │ HTTPS / REST
-                           ▼
-                     Amazon EC2
-                  ┌─────────────────┐
-                  │ Docker Container │
-                  │                 │
-                  │ Django REST API │
-                  └─────────────────┘
-                           │
-             ┌─────────────┼─────────────┐
-             │             │             │
-             ▼             ▼             ▼
-        Amazon RDS      Amazon S3    Amazon Cognito
-        PostgreSQL        Media      Authentication
-             │
-             │
-             ▼
-      Persistent Data
-
-
-Docker Deployment:
-Developer / CI
-      │
-      ▼
- Docker Image
-      │
-      ▼
- Amazon ECR
-      │
-      ▼
- Amazon EC2
-
-
-Supporting Services:
-
-AWS Secrets Manager
-        │
-        ▼
-   Django Backend
-
-Amazon CloudWatch
-        ▲
-        │
- EC2 / Django Logs
+                      /          \
+                     /            \
+           Frontend Requests     /api/*
+                   |               |
+                   v               v
+              Private S3       VPC Origin
+              Frontend             |
+                                   v
+                           Internal ALB
+                                   |
+                                   v
+                           EC2 Auto Scaling
+                            /           \
+                           v             v
+                      EC2 (AZ-A)     EC2 (AZ-B)
+                           \             /
+                            \           /
+                             v         v
+                         Django REST API
+                           /         \
+                          v           v
+                     RDS PostgreSQL  S3 Media
 ```
 
----
+Amazon Cognito independently authenticates users through its managed login service. The frontend obtains authentication tokens and includes them in protected API requests.
 
-# 4. Architecture Principles
+## 4. Frontend Hosting
 
-The AWS architecture follows several core principles.
+The frontend is developed using React and Vite.
 
-## 4.1 Separate Compute from Persistent Data
+The production build is stored in a private Amazon S3 bucket and delivered through CloudFront.
 
-Persistent application data must remain outside the Django container.
+CloudFront Origin Access Control (OAC) restricts direct access to the frontend bucket.
 
-```text
-Django Container
-      │
-      ├── PostgreSQL → Amazon RDS
-      │
-      └── Media      → Amazon S3
-```
-
-This allows the backend container to be:
-
-- Restarted.
-- Replaced.
-- Redeployed.
-- Rebuilt.
-- Scaled.
-
-without losing application data.
-
----
-
-## 4.2 Keep the Backend Stateless Where Practical
-
-The Django backend should not depend on local server files or local memory for authoritative persistent application state.
-
-Persistent state belongs in external AWS services.
-
-```text
-Application Data
-      ↓
-Amazon RDS
-
-Media
-      ↓
-Amazon S3
-
-Authentication Identity
-      ↓
-Amazon Cognito
-```
-
-This supports future horizontal scaling.
-
----
-
-## 4.3 Separate Authentication from Application Data
-
-Amazon Cognito manages authentication identity.
-
-Django and PostgreSQL manage application-specific user data.
-
-```text
-Amazon Cognito
-      │
-      │ authenticated identity
-      ▼
-Django
-      │
-      ▼
-Application User
-      │
-      ▼
-Amazon RDS
-```
-
-Application data such as:
-
-```text
-Profiles
-Inventory
-Preferences
-Allergies
-Saved Recipes
-Reviews
-Shopping Lists
-```
-
-belongs in PostgreSQL rather than Cognito.
-
----
-
-## 4.4 Use Managed Services Where Practical
-
-Managed AWS services should be used for infrastructure responsibilities that do not need to be implemented manually.
-
-Examples:
-
-```text
-Database       → Amazon RDS
-Authentication → Amazon Cognito
-Object Storage → Amazon S3
-Image Registry → Amazon ECR
-Monitoring     → Amazon CloudWatch
-Secrets        → AWS Secrets Manager
-```
-
-This reduces infrastructure management complexity.
-
----
-
-# 5. Frontend Architecture
-
-The React frontend is built into static production files.
-
-Conceptually:
-
-```text
-React Source
-     │
-     ▼
-npm build
-     │
-     ▼
-Static Files
-     │
-     ▼
-Amazon S3
-     │
-     ▼
-Amazon CloudFront
-     │
-     ▼
-Users
-```
-
-Amazon S3 stores the built frontend assets.
-
-Amazon CloudFront distributes those assets to users.
-
----
-
-# 6. Amazon S3 Frontend Hosting
-
-The production React build is stored in an S3 bucket.
-
-Typical files include:
-
-```text
-index.html
-JavaScript bundles
-CSS
-Images
-Other static assets
-```
-
-The frontend S3 bucket is intended to contain deployment artifacts rather than application database data.
-
-CloudFront should serve as the public frontend delivery layer.
-
----
-
-# 7. Amazon CloudFront
-
-CloudFront provides frontend content delivery.
-
-Conceptually:
-
-```text
-User
- │
- ▼
-CloudFront
- │
- ▼
-S3 Frontend Bucket
-```
-
-Benefits include:
-
-- HTTPS delivery.
-- Edge caching.
-- Reduced direct exposure of frontend storage.
-- Improved static-content delivery.
-- A stable public frontend endpoint.
-
-CloudFront is part of the initial frontend architecture.
-
----
-
-# 8. Backend Architecture
-
-The Django REST Framework backend runs inside a Docker container hosted on Amazon EC2.
-
-```text
-Amazon EC2
-    │
-    ▼
-Docker Runtime
-    │
-    ▼
-Django REST API
-```
-
-The initial deployment uses one EC2 backend instance.
-
-This keeps the project deployment simple while preserving the ability to introduce additional instances later.
-
----
-
-# 9. Docker Backend
-
-The backend is packaged as a Docker image.
-
-Conceptually:
-
-```text
-Django Source Code
-       │
-       ▼
-    Dockerfile
-       │
-       ▼
-   Docker Image
-       │
-       ▼
-   Amazon ECR
-       │
-       ▼
-   Amazon EC2
-       │
-       ▼
-Docker Container
-```
-
-The Docker image should contain:
-
-- Django application code.
-- Python runtime.
-- Python dependencies.
-- Required backend runtime configuration.
-
-The image should not contain:
-
-- Production database contents.
-- Persistent uploaded media.
-- Hardcoded production credentials.
-
----
-
-# 10. Amazon ECR
-
-Amazon Elastic Container Registry stores backend Docker images.
-
-Deployment flow:
-
-```text
-Developer / CI
-      │
-      ▼
-Build Docker Image
-      │
-      ▼
-Push Image
-      │
-      ▼
-Amazon ECR
-      │
-      ▼
-Amazon EC2
-      │
-      ▼
-Pull Image
-      │
-      ▼
-Run Container
-```
-
-Using ECR provides a centralized location for backend deployment images.
-
-EC2 should receive only the IAM permissions required to pull the appropriate images.
-
----
-
-# 11. Amazon EC2
-
-Amazon EC2 hosts the Dockerized Django backend.
-
-Initial architecture:
-
-```text
-Amazon EC2
-┌─────────────────────┐
-│                     │
-│   Docker Runtime    │
-│         │           │
-│         ▼           │
-│   Django REST API   │
-│                     │
-└─────────────────────┘
-```
-
-The EC2 instance provides backend compute resources.
-
-The backend communicates with:
-
-```text
-Amazon RDS
-Amazon S3
-Amazon Cognito
-AWS Secrets Manager
-Amazon CloudWatch
-```
-
-where required.
-
-The EC2 instance should not be treated as persistent application storage.
-
----
-
-# 12. Backend Deployment Flow
-
-A typical backend deployment follows:
-
-```text
-Developer
-   │
-   ▼
-Git Repository
-   │
-   ▼
-Build / Test
-   │
-   ▼
-Docker Image
-   │
-   ▼
-Amazon ECR
-   │
-   ▼
-Amazon EC2
-   │
-   ▼
-Pull Updated Image
-   │
-   ▼
-Restart / Replace Container
-```
-
-This allows the application runtime to be replaced without replacing persistent application data.
-
----
-
-# 13. Database Architecture
-
-Amazon RDS for PostgreSQL stores persistent relational application data.
-
-```text
-Django REST API
-       │
-       ▼
- Amazon RDS
- PostgreSQL
-```
-
-Persistent data includes:
-
-```text
-Users
-User Profiles
-Ingredients
-Inventory Items
-Recipes
-Recipe Ingredients
-Saved Recipes
-Tags
-User Preferences
-Allergens
-User Allergies
-Reviews
-Shopping Lists
-Shopping List Items
-```
-
-Detailed database relationships are defined in `database-design.md`.
-
----
-
-# 14. Why Amazon RDS
-
-Amazon RDS is used instead of storing PostgreSQL directly inside the EC2 instance or Docker container.
-
-This separates application compute from persistent relational storage.
-
-```text
-Incorrect:
-
-EC2
- └── Docker
-      ├── Django
-      └── PostgreSQL
-
-
-Architecture:
-
-EC2
- └── Docker
-      └── Django
-           │
-           ▼
-        Amazon RDS
-```
-
-This provides a cleaner architecture and allows backend instances to be replaced independently of the database.
-
----
-
-# 15. Database Network Access
-
-The PostgreSQL database should not be publicly exposed to the internet.
-
-Conceptually:
-
-```text
-Internet
-   │
-   ▼
-Backend Entry Point
-   │
-   ▼
-EC2 / Django
-   │
-   │ PostgreSQL connection
-   ▼
-Amazon RDS
-```
-
-RDS access should be restricted using security groups.
-
-Conceptually:
-
-```text
-RDS Security Group
-
-Inbound PostgreSQL:
-Source → Backend EC2 Security Group
-Port   → PostgreSQL database port
-```
-
-The database should not accept unrestricted internet traffic.
-
----
-
-# 16. Amazon Cognito
-
-Amazon Cognito provides authentication for Registered Users.
-
-Conceptually:
-
-```text
-User
- │
- ▼
-React
- │
- ▼
-Amazon Cognito
- │
- │ Authenticate
- ▼
-Authentication Token
- │
- ▼
-React
- │
- │ Authenticated API Request
- ▼
-Django REST API
-```
-
-Django validates authenticated identity and maps it to the corresponding application User.
-
----
-
-# 17. Cognito vs. Django Responsibilities
-
-Authentication and authorization remain separate.
-
-```text
-Amazon Cognito
-      │
-      └── Authentication
-          "Who is this user?"
-
-
-Django
-      │
-      └── Authorization
-          "What may this user do?"
-```
-
-Cognito is responsible for:
-
-- Authentication identity.
-- Authentication credentials.
-- Authentication tokens.
-- Supported account authentication workflows.
-
-Django is responsible for:
-
-- Application User mapping.
-- Resource ownership.
-- User permissions.
-- Administrator permissions.
-- Private-data access.
-- Protected API operations.
-
----
-
-# 18. Application User Mapping
-
-The authenticated Cognito identity is mapped to an application User.
-
-```text
-Cognito Identity
-       │
-       │ stable external identifier
-       ▼
-     Django
-       │
-       ▼
-Application User
-       │
-       ▼
-Amazon RDS
-```
-
-The application User may then be associated with:
-
-```text
-Profile
-Inventory
-UserPreferences
-UserAllergies
-SavedRecipes
-Reviews
-ShoppingLists
-Owned Recipes
-```
-
-The application database does not need to store user passwords.
-
----
-
-# 19. Media Storage
-
-Application media is stored in Amazon S3.
-
-Examples include:
-
-- Recipe images.
-- User profile images.
-
-Conceptually:
-
-```text
-User / React
-     │
-     ▼
-Django API
-     │
-     ▼
-Amazon S3
-     │
-     ▼
-Media Object
-```
-
-PostgreSQL stores the information required to reference the media object.
-
-```text
-Recipe
-├── database fields
-└── image_reference ─────→ Amazon S3
-
-
-UserProfile
-├── database fields
-└── profile_image_reference ─────→ Amazon S3
-```
-
-Large image binaries should not be stored directly in PostgreSQL.
-
----
-
-# 20. Frontend and Media S3 Separation
-
-The application may use separate S3 buckets or appropriately separated storage locations for:
-
-```text
-Frontend Deployment Files
-          │
-          ▼
-         S3
-
-
-Application Media
-          │
-          ▼
-         S3
-```
-
-These resources have different responsibilities and may require different access policies.
-
-Frontend assets are deployment artifacts.
-
-Application media is runtime application content.
-
----
-
-# 21. AWS Secrets Manager
-
-Sensitive production configuration should not be committed directly to the Git repository or hardcoded into the Docker image.
-
-Examples include:
-
-```text
-Database credentials
-Django secret values
-External service credentials
-Other sensitive configuration
-```
+The frontend does not use public S3 static website hosting.
 
-Conceptually:
-
-```text
-AWS Secrets Manager
-        │
-        ▼
-   EC2 / Django
-        │
-        ▼
-Runtime Configuration
-```
-
-The EC2 environment should receive only the IAM permissions required to retrieve the necessary secrets.
-
----
-
-# 22. Configuration Management
-
-Application configuration should distinguish between:
-
-```text
-Local Development
-AWS Development / Testing
-Production
-```
-
-Non-sensitive configuration may use environment variables or deployment configuration.
-
-Sensitive production values should use appropriate secret-management mechanisms.
-
-Production secrets must not be committed to Git.
-
----
-
-# 23. IAM
-
-AWS Identity and Access Management controls access between AWS resources.
-
-The architecture should follow least-privilege principles.
-
-For example, the EC2 backend may require permission to:
-
-```text
-Pull Docker images from ECR
-Access required media objects in S3
-Read required Secrets Manager secrets
-Write logs or metrics where configured
-```
-
-The backend should not receive unnecessary permissions to unrelated AWS resources.
-
----
-
-# 24. Security Groups
-
-Security groups provide network-level access control.
-
-Conceptually:
-
-```text
-Internet
-   │
-   ▼
-Backend Security Group
-   │
-   ▼
-EC2
-   │
-   ▼
-Database Security Group
-   │
-   ▼
-RDS
-```
-
-The initial backend security group should allow only the network access required for application operation and administration.
-
-The RDS security group should allow database connections from the backend security group rather than from arbitrary public IP addresses.
-
----
-
-# 25. VPC Architecture
-
-EC2 and RDS operate within an Amazon VPC.
-
-At a high level:
-
-```text
-Amazon VPC
-│
-├── Backend Compute
-│      └── EC2
-│
-└── Database
-       └── RDS PostgreSQL
-```
-
-Network configuration should prevent direct public database access.
-
-The exact subnet architecture may evolve as the deployment becomes more advanced.
-
-For the initial project, the network should remain as simple as possible while preserving appropriate database isolation.
-
----
-
-# 26. Backend Public Access
-
-The initial deployment uses a single EC2 backend.
-
-Therefore, the backend API may initially be reached through the EC2-hosted application endpoint.
-
-Conceptually:
-
-```text
-React Frontend
-      │
-      │ HTTPS API Requests
-      ▼
-EC2 Backend
-      │
-      ▼
-Django
-```
-
-This is the initial implementation architecture.
-
-A future production-scale architecture may place an Application Load Balancer in front of EC2 instances.
-
----
-
-# 27. CORS
-
-Because the React frontend and Django backend may be hosted on different origins, Django must configure Cross-Origin Resource Sharing appropriately.
-
-Conceptually:
-
-```text
-CloudFront Frontend
-       │
-       │ HTTPS API Request
-       ▼
-Django Backend
-       │
-       ▼
-CORS Validation
-```
-
-Production CORS configuration should allow approved frontend origins rather than unrestricted origins.
-
----
-
-# 28. HTTPS
-
-Production communication should use HTTPS.
-
-Important communication paths include:
-
-```text
-User → CloudFront
-React → Django API
-React → Cognito
-```
-
-Database communication and AWS service communication should use secure supported connections where appropriate.
-
-HTTPS protects application traffic in transit.
-
----
-
-# 29. Amazon CloudWatch
-
-Amazon CloudWatch provides application and infrastructure monitoring.
-
-Possible monitored information includes:
-
-```text
-EC2 resource utilization
-Application logs
-Backend errors
-Deployment problems
-Database-related alarms
-```
-
-Conceptually:
-
-```text
-EC2 / Django
-     │
-     ▼
-CloudWatch
-     │
-     ├── Logs
-     ├── Metrics
-     └── Alarms
-```
-
-CloudWatch allows the team to diagnose problems without relying only on direct EC2 terminal access.
-
----
-
-# 30. Logging
-
-Backend logs should provide useful operational information without exposing sensitive information.
-
-Logs may include:
-
-```text
-Application errors
-Request failures
-Deployment problems
-Authentication validation failures
-Unexpected service errors
-```
-
-Logs should not intentionally expose:
-
-```text
-Passwords
-Authentication tokens
-Database passwords
-Sensitive secret values
-```
-
-CloudWatch can serve as the centralized location for deployed backend logs.
-
----
-
-# 31. Initial Deployment Architecture
-
-The initial project deployment intentionally remains simple.
-
-```text
-                         Users
-                           │
-                           ▼
-                       CloudFront
-                           │
-                           ▼
-                    S3 React Frontend
-                           │
-                           ▼
-                    Single EC2 Instance
-                           │
-                           ▼
-                    Dockerized Django
-                           │
-             ┌─────────────┼─────────────┐
-             ▼             ▼             ▼
-        RDS PostgreSQL    S3 Media     Cognito
-```
+CloudFront also handles single-page application routing by returning `index.html` for supported frontend navigation paths.
 
-Supporting services:
+## 5. Backend Hosting and Load Balancing
 
-```text
-ECR
-Secrets Manager
-CloudWatch
-```
-
-This architecture is sufficient for the initial application while demonstrating separation between:
-
-- Frontend.
-- Backend compute.
-- Database.
-- Authentication.
-- Media.
-- Deployment artifacts.
-
----
-
-# 32. Why Start with One EC2 Instance
-
-The initial system uses one EC2 backend instance because:
-
-- The application is a class project.
-- Initial traffic is expected to be limited.
-- Deployment remains easier to understand and demonstrate.
-- Infrastructure complexity remains manageable.
-- Docker already provides a reproducible backend runtime.
-- The architecture can be extended later without redesigning the application.
-
-Starting with one instance does not mean the architecture is permanently limited to one instance.
-
----
-
-# 33. Statelessness and Future Scaling
-
-The backend is designed so that additional Django instances may be introduced later.
-
-Because persistent state exists outside EC2:
-
-```text
-Database → RDS
-Media    → S3
-Identity → Cognito
-```
-
-a future architecture may run multiple equivalent backend instances.
-
-```text
-              Django Instance A
-             /
-Requests ───┼── Django Instance B
-             \
-              Django Instance C
-                      │
-                      ▼
-                  Amazon RDS
-```
-
-No individual backend instance should contain authoritative persistent user data.
-
----
-
-# 34. Future Application Load Balancer
-
-If backend traffic increases, an Application Load Balancer may be introduced.
-
-Future architecture:
-
-```text
-Clients
-   │
-   ▼
-Application Load Balancer
-   │
-   ├── EC2 Instance A
-   ├── EC2 Instance B
-   └── EC2 Instance C
-```
-
-The load balancer distributes requests across healthy backend instances.
-
-An ALB is a future scalability component and is not required for the initial deployment.
-
----
-
-# 35. Future EC2 Auto Scaling
-
-An EC2 Auto Scaling Group may later manage backend capacity.
-
-Conceptually:
-
-```text
-Application Load Balancer
-          │
-          ▼
-   Auto Scaling Group
-      │    │    │
-      ▼    ▼    ▼
-     EC2  EC2  EC2
-```
-
-Auto Scaling may:
-
-- Add backend instances when additional capacity is required.
-- Remove instances when capacity is no longer needed.
-- Replace unhealthy instances.
-- Distribute instances across multiple Availability Zones.
-
-The stateless backend architecture makes this possible.
-
-Auto Scaling is not required for the initial project deployment.
-
----
-
-# 36. Availability Zones
+The Django REST Framework backend runs inside Docker containers on Amazon EC2.
 
-The initial backend may operate from a single EC2 instance.
+The final deployment uses an EC2 Auto Scaling Group with the following configuration:
 
-A future higher-availability architecture may distribute backend instances across multiple Availability Zones.
+| Setting | Value |
+|---|---|
+| Instance type | `t3.micro` |
+| Minimum capacity | 2 |
+| Desired capacity | 2 |
+| Maximum capacity | 3 |
+| Deployment | Two private application subnets |
+| Availability Zones | `us-east-1a`, `us-east-1b` |
+| Container runtime | Docker with Gunicorn |
 
-```text
-              Application Load Balancer
-                     /          \
-                    /            \
-                   ▼              ▼
-                AZ-A             AZ-B
-                  │                │
-                  ▼                ▼
-             EC2 Instance    EC2 Instance
-```
-
-An Auto Scaling Group can launch instances across configured Availability Zones.
-
-This reduces dependence on a single backend instance or Availability Zone.
-
----
-
-# 37. Future Database Availability and Scaling
-
-The initial database uses Amazon RDS for PostgreSQL.
-
-Future requirements may justify additional RDS capabilities such as:
-
-```text
-Multi-AZ deployment
-Larger database instance classes
-Read replicas where appropriate
-Storage scaling
-Database monitoring improvements
-```
-
-These capabilities should be introduced when justified by availability or performance requirements rather than enabled only for architectural complexity.
-
----
-
-# 38. Independent Scaling
-
-The architecture separates major components so they can scale independently.
-
-```text
-Frontend
-   │
-   └── S3 + CloudFront
-
-Backend
-   │
-   └── EC2
-       └── Future Auto Scaling
-
-Database
-   │
-   └── RDS
-
-Media
-   │
-   └── S3
-
-Authentication
-   │
-   └── Cognito
-```
+The Auto Scaling Group uses an EC2 Launch Template to configure new backend instances.
 
-For example, increasing backend compute capacity does not require moving application media out of the backend because media is already stored in S3.
+An internal Application Load Balancer distributes requests to healthy instances.
 
----
+The target group forwards HTTP requests to port 80 and uses `/healthz` for health checks.
 
-# 39. Scalability Example
+The final deployment was verified with two healthy EC2 instances registered in the target group.
 
-Initial system:
+## 6. CloudFront API Routing
 
-```text
-100 users
-   │
-   ▼
-CloudFront
-   │
-   ▼
-1 EC2 Backend
-   │
-   ▼
-RDS
-```
-
-If usage grows:
-
-```text
-More Users
-    │
-    ▼
-CloudFront
-    │
-    ▼
-Application Load Balancer
-    │
-    ▼
-Auto Scaling Group
- ┌────┼────┐
- ▼    ▼    ▼
-EC2  EC2  EC2
- │    │    │
- └────┼────┘
-      ▼
-     RDS
-```
-
-The exact number of instances depends on measured application demand.
+CloudFront acts as the application's public entry point for both static frontend content and backend API requests.
 
-The architecture should scale based on observed metrics rather than fixed assumptions.
+| Request | Destination |
+|---|---|
+| Frontend pages and assets | Private S3 frontend bucket |
+| `/api/*` | Internal Application Load Balancer through CloudFront VPC origin |
 
----
+The VPC origin allows CloudFront to reach the internal ALB without exposing the backend instances directly to the public internet.
 
-# 40. Recommendation Service Scaling
+This design provides a unified HTTPS entry point for the application.
 
-Recommendation logic initially runs within the Django backend.
+## 7. VPC and Networking
 
-```text
-API Request
-     │
-     ▼
-Django
-     │
-     ▼
-RecommendationService
-     │
-     ▼
-PostgreSQL
-```
-
-This is appropriate for the initial application.
+The application operates within a VPC using the CIDR range `10.0.0.0/16`.
 
-Because RecommendationService is separated at the application layer, future optimization may include:
+### Subnet Configuration
 
-- Database query optimization.
-- Caching.
-- Additional backend instances.
-- Background processing for expensive future operations.
+| Subnet | CIDR | Availability Zone | Purpose |
+|---|---|---|---|
+| Public subnet | `10.0.2.0/24` | `us-east-1a` | NAT Gateway |
+| Private application A | `10.0.5.0/24` | `us-east-1a` | Backend EC2 and internal ALB |
+| Private application B | `10.0.6.0/24` | `us-east-1b` | Backend EC2 and internal ALB |
 
-A separate recommendation microservice is not required for the initial implementation.
+The Internet Gateway is attached to the VPC.
 
----
+A NAT Gateway is deployed in the public subnet to provide outbound internet access for private resources when required.
 
-# 41. Media Scaling
+The private application route tables contain a local VPC route and a default route to the NAT Gateway.
 
-Amazon S3 provides persistent object storage independently of backend compute.
+Backend instances do not have public IP addresses.
 
-```text
-Many Users
-    │
-    ▼
-Application
-    │
-    ▼
-Amazon S3
-```
+## 8. VPC Endpoints
 
-Media therefore does not need to be duplicated across EC2 instances.
+VPC endpoints allow private backend instances to access supported AWS services without routing that traffic through the public internet.
 
-This is especially important if the backend later scales horizontally.
+The deployed endpoints include:
 
----
+| Endpoint | Type |
+|---|---|
+| Amazon S3 | Gateway |
+| Amazon ECR API | Interface |
+| Amazon ECR Docker | Interface |
+| AWS Systems Manager | Interface |
+| SSM Messages | Interface |
+| EC2 Messages | Interface |
+| AWS Secrets Manager | Interface |
+| Amazon CloudWatch Logs | Interface |
 
-# 42. Database Backup and Recovery
+The backend instances retrieve container images from ECR using the ECR interface endpoints, with S3 access available through the gateway endpoint.
 
-The RDS deployment should use appropriate database backup capabilities.
+The S3 gateway endpoint also supports access to the private recipe media bucket.
 
-Persistent application data should not depend on EC2 disk state.
+Security groups restrict access to the interface endpoints.
 
-Conceptually:
+## 9. Database Architecture
 
-```text
-EC2 Failure
-    │
-    ▼
-Backend Replaced
-    │
-    ▼
-Reconnect to RDS
-    │
-    ▼
-Application Data Remains
-```
+The production database uses Amazon RDS for PostgreSQL.
 
-The exact backup retention and recovery configuration may be selected during deployment.
+The database stores persistent application information, including users, ingredients, recipes, inventory, preferences, allergies, and saved recipes.
 
----
+| Setting | Configuration |
+|---|---|
+| Database engine | PostgreSQL |
+| AWS service | Amazon RDS |
+| Instance class | `db.t3.micro` |
+| Public accessibility | Disabled |
+| Access | Restricted through security groups |
 
-# 43. EC2 Failure Behavior
+Django connects to RDS using database credentials supplied through the deployment configuration.
 
-Because EC2 does not contain authoritative persistent application data, replacing the backend instance should not destroy:
+The backend Docker containers do not store persistent relational data.
 
-```text
-Users
-Recipes
-Inventory
-Reviews
-Shopping Lists
-Media
-```
+Multi-AZ RDS deployment was not enabled in the final configuration.
 
-Those resources remain in external persistent services.
-
-```text
-Failed EC2
-    │
-    X
-
-Replacement EC2
-    │
-    ├── Pull Docker Image from ECR
-    ├── Retrieve required configuration
-    ├── Connect to RDS
-    ├── Connect to S3
-    └── Resume Django service
-```
+## 10. Media Storage
 
-This separation improves recoverability.
-
----
-
-# 44. CI/CD Direction
-
-The architecture supports future automated deployment.
-
-Conceptually:
-
-```text
-Developer
-   │
-   ▼
-Git Push / Pull Request
-   │
-   ▼
-GitHub Actions
-   │
-   ├── Run Tests
-   │
-   └── Build Docker Image
-             │
-             ▼
-         Amazon ECR
-             │
-             ▼
-         Amazon EC2
-```
+Application media is stored in a separate private Amazon S3 bucket.
 
-The exact deployment automation may evolve during implementation.
+The backend uses `django-storages` to integrate Django with S3.
 
-CI/CD should not bypass testing or expose production credentials.
+Recipe images are stored independently of EC2 instances, allowing containers to be replaced without losing uploaded media.
 
----
+The initial production database contains 100 recipes imported from TheMealDB, with associated images.
 
-# 45. Security Architecture
+## 11. Authentication
 
-The major security controls are:
+Amazon Cognito User Pools manages registered-user authentication.
 
-```text
-Authentication
-      │
-      ▼
-Amazon Cognito
+The application supports Google Sign-In through a configured Cognito identity provider.
 
+The frontend uses the OAuth 2.0 Authorization Code flow with PKCE.
 
-Authorization
-      │
-      ▼
-Django
+After authentication, React sends the Cognito access token to protected Django API endpoints.
 
+Django validates the token and maps the Cognito identity to a local application user.
 
-Network Access
-      │
-      ▼
-VPC + Security Groups
+Cognito manages authentication, while Django remains responsible for application permissions, resource ownership, and authorization.
 
+## 12. Security and Access Control
 
-Secrets
-      │
-      ▼
-AWS Secrets Manager
+The architecture applies security controls across multiple layers.
 
+- **CloudFront:** Provides the public HTTPS entry point.
+- **Private EC2 instances:** Prevent direct public access to backend servers.
+- **Internal ALB:** Accepts backend traffic through the configured VPC origin and security rules.
+- **Private RDS:** Restricts database access to authorized backend resources.
+- **Security groups:** Control communication between application components.
+- **IAM roles:** Provide EC2 instances with required AWS service permissions.
+- **Secrets Manager:** Stores sensitive credentials and configuration.
+- **Cognito:** Authenticates registered users.
+- **Django:** Enforces application-level permissions and resource ownership.
 
-Database Isolation
-      │
-      ▼
-RDS not publicly exposed
+AWS Systems Manager Session Manager is used to access and manage EC2 instances without requiring public SSH access.
 
+## 13. Deployment and Infrastructure Management
 
-Media / Object Access
-      │
-      ▼
-S3 + IAM Policies
+AWS CloudFormation manages the infrastructure through separate stacks covering:
 
+- Networking and routing.
+- VPC endpoints.
+- Backend Auto Scaling and load balancing.
+- Frontend S3 and CloudFront.
+- RDS database.
+- S3 media storage.
+- Cognito authentication.
 
-Transport Security
-      │
-      ▼
-HTTPS
-```
+Backend Docker images are built and pushed to Amazon ECR.
 
-Security is therefore enforced at multiple layers rather than relying on a single service.
-
----
-
-# 46. Trust Boundaries
-
-The browser is not trusted to make authoritative authorization decisions.
-
-Conceptually:
-
-```text
-Browser / React
-      │
-      │ untrusted client input
-      ▼
-Django API
-      │
-      ├── Authentication Validation
-      ├── Authorization
-      ├── Input Validation
-      └── Business Logic
-      │
-      ▼
-AWS Resources
-```
+EC2 instances retrieve the required image and run the Django application through Docker and Gunicorn.
 
-For example, React cannot securely determine that a User owns a Recipe.
+The final backend image was deployed using the `final-v1` tag.
 
-Django must verify ownership before allowing modification or deletion.
+Infrastructure changes are managed through CloudFormation templates rather than relying exclusively on manual AWS Console configuration.
 
----
+## 14. Monitoring and Performance Testing
 
-# 47. Resource Ownership in AWS Deployment
+Amazon CloudWatch was used to inspect EC2 and RDS resource utilization.
 
-Cognito establishes authenticated identity.
+The final deployment was also tested using ApacheBench.
 
-Django maps that identity to an application User and derives resource ownership.
+Tests included recipe listing and recipe detail API requests, using 1,000 requests at concurrency levels of 10, 50, and 100.
 
-```text
-Cognito Token
-     │
-     ▼
-Django
-     │
-     ▼
-Application User
-     │
-     ├── Recipe.owner
-     ├── InventoryItem.user
-     ├── SavedRecipe.user
-     ├── Review.user
-     └── ShoppingList.user
-```
+During the recorded monitoring period:
 
-The frontend shall not be trusted to determine these ownership relationships.
+| Resource | Observed CPU utilization |
+|---|---|
+| Amazon RDS | Approximately 4.0% average, 5.7% maximum |
+| EC2 instances | Approximately 0.48–0.61% average |
 
-This matches the authorization model defined in `api-design.md` and `system-design.md`.
+These measurements describe the observed test period rather than guaranteed performance under all workloads.
 
----
+## 15. Architecture Decisions
 
-# 48. Data Location Summary
+### Private Backend Instead of Public EC2
 
-| Data | Location |
-| --- | --- |
-| React production build | Amazon S3 |
-| Frontend delivery/cache | Amazon CloudFront |
-| Django application runtime | Amazon EC2 |
-| Docker images | Amazon ECR |
-| Relational application data | Amazon RDS PostgreSQL |
-| Recipe images | Amazon S3 |
-| Profile images | Amazon S3 |
-| Authentication identity | Amazon Cognito |
-| Sensitive production configuration | AWS Secrets Manager |
-| Application/infrastructure logs | Amazon CloudWatch |
-| Temporary Guest state | Browser / application runtime |
-| Recommendation results | Dynamically calculated; not persistently stored initially |
+The project initially used a publicly accessible backend instance.
 
----
+The final deployment moved backend instances into private subnets and introduced an internal ALB accessible through CloudFront VPC origin.
 
-# 49. Initial vs. Future Architecture
+This reduced direct public exposure of the backend infrastructure.
 
-## Initial
+### Auto Scaling Instead of a Single Instance
 
-```text
-Frontend
-S3 + CloudFront
+The initial architecture used a single EC2 instance.
 
-Backend
-1 EC2 instance
-Dockerized Django
+The final architecture uses an Auto Scaling Group across two Availability Zones, improving backend redundancy and supporting instance replacement.
 
-Docker Images
-ECR
+### Managed Database Instead of Local PostgreSQL
 
-Database
-RDS PostgreSQL
+Amazon RDS separates persistent relational data from backend compute, allowing EC2 instances to be replaced without losing database contents.
 
-Authentication
-Cognito
+### Cognito Instead of Application-Managed Authentication
 
-Media
-S3
+Amazon Cognito handles user authentication and Google federation, while Django retains application-specific authorization.
 
-Secrets
-Secrets Manager
+## 16. Challenges Encountered
 
-Monitoring
-CloudWatch
-```
+### Systems Manager Connectivity After VPC Endpoint Deployment
 
-## Future, If Required
-
-```text
-Application Load Balancer
-        │
-        ▼
-EC2 Auto Scaling Group
-        │
-   ┌────┼────┐
-   ▼    ▼    ▼
-  EC2  EC2  EC2
-        │
-        ▼
-   RDS PostgreSQL
-```
+During the deployment of VPC endpoints, the existing EC2 instance lost connectivity to AWS Systems Manager.
 
-Potential future improvements include:
-
-- Multiple Availability Zones.
-- RDS Multi-AZ.
-- Additional monitoring.
-- Caching.
-- More advanced deployment automation.
-- Additional backend instances.
-- More advanced recovery strategies.
-
-These are scalability paths, not requirements for the initial implementation.
-
----
-
-# 50. Core AWS Architecture Rules
-
-The implementation should follow these rules:
-
-1. React production files are hosted separately from Django.
-2. Django runs inside Docker on EC2.
-3. Docker images are stored in ECR.
-4. PostgreSQL runs in RDS rather than inside the backend container.
-5. Persistent media is stored in S3 rather than on EC2.
-6. Cognito handles authentication identity.
-7. Django handles application authorization and ownership.
-8. Application-specific user data remains in PostgreSQL.
-9. Production secrets shall not be committed to Git.
-10. RDS shall not be publicly exposed.
-11. AWS permissions should follow least-privilege principles.
-12. Backend containers should remain replaceable.
-13. Persistent application state should remain outside individual backend instances.
-14. The initial deployment uses one EC2 backend instance.
-15. ALB and Auto Scaling are future scalability options rather than initial requirements.
-16. Future backend instances may span multiple Availability Zones.
-17. Frontend, backend, database, media, and authentication should remain independently manageable.
-18. Infrastructure complexity should be introduced only when justified by application requirements.
-
----
-
-# 51. Final Architecture Summary
-
-The initial production architecture is:
-
-```text
-                              Users
-                                │
-                                ▼
-                        Amazon CloudFront
-                                │
-                                ▼
-                         Amazon S3
-                       React Frontend
-                                │
-                                │ HTTPS / REST
-                                ▼
-                         Amazon EC2
-                    ┌─────────────────────┐
-                    │   Docker Container  │
-                    │                     │
-                    │   Django REST API   │
-                    └─────────────────────┘
-                                │
-             ┌──────────────────┼──────────────────┐
-             │                  │                  │
-             ▼                  ▼                  ▼
-        Amazon RDS          Amazon S3         Amazon Cognito
-        PostgreSQL            Media           Authentication
-             │
-             ▼
-     Persistent App Data
-
-
-Deployment:
-
-Git / Developer
-      │
-      ▼
- Docker Build
-      │
-      ▼
- Amazon ECR
-      │
-      ▼
- Amazon EC2
-
-
-Operations:
-
-Secrets Manager ─────→ Django
-
-Django / EC2 ────────→ CloudWatch
-```
+Private DNS redirected Systems Manager traffic to the new interface endpoints, but the endpoint security group initially permitted HTTPS connections only from the private application subnets.
 
-The future scalable architecture becomes:
-
-```text
-                         Users
-                           │
-                           ▼
-                      CloudFront
-                           │
-                           ▼
-                     React Frontend
-                           │
-                           ▼
-                Application Load Balancer
-                           │
-                    ┌──────┼──────┐
-                    ▼      ▼      ▼
-                   EC2    EC2    EC2
-                    │      │      │
-                    └──────┼──────┘
-                           │
-              ┌────────────┼────────────┐
-              ▼            ▼            ▼
-             RDS          S3         Cognito
-```
+The existing instance was still located in the public subnet.
 
-The application therefore begins with a simple single-instance backend while preserving the separation of compute, persistent data, media, authentication, and deployment artifacts required for future scaling.
+**Solution:** The endpoint security group was updated to allow HTTPS traffic from the public subnet, restoring Session Manager connectivity. The corresponding CloudFormation configuration was also updated.
 
----
+The legacy public EC2 instance was subsequently removed as part of the transition to the private backend architecture.
 
-# 52. Related Documentation
+## 17. Future Improvements
 
-```text
-requirements.md
-    ↓
-Defines application requirements
+Potential future enhancements include:
 
-database-design.md
-    ↓
-Defines persistent relational data
+- Multi-AZ RDS for improved database availability.
+- A second NAT Gateway to reduce single-AZ networking dependency.
+- AWS WAF for additional application-layer protection.
+- Expanded CloudWatch alarms and application monitoring.
+- Automated CI/CD pipelines.
+- Additional performance optimization and caching.
 
-api-design.md
-    ↓
-Defines frontend/backend contracts
+These are future improvements and are not presented as completed components of the final deployment.
 
-system-design.md
-    ↓
-Defines software architecture and service responsibilities
+## 18. Related Documentation
 
-aws-architecture.md
-    ↓
-Defines cloud deployment and infrastructure
-```
+- [Requirements](requirements.md)
+- [System Design](system-design.md)
+- [Database Design](database-design.md)
+- [API Design](api-design.md)
+- [Main README](../README.md)
