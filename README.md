@@ -1,144 +1,168 @@
 # Recipe Suggestion App
+
+> 📄 **Final Project Documentation:** [View Full Report](docs/Final%20zdocumentation.pdf)
+
+A cloud-based web application that helps users discover recipes based on ingredients they already have, manage personal ingredient inventories, and explore recipes according to dietary preferences and other filtering criteria.
+
+The application was developed as part of a Cloud Computing course project and deployed on Amazon Web Services (AWS).
+
+## Project Milestones
+
 ```mermaid
 flowchart LR
-    A["Sep 4, 2026<br><b>Project Proposal</b>"]
-    B["Oct 16, 2026<br><b>Midpoint Evaluation</b>"]
-    C["Nov 13, 2026<br><b>Final Documentation & Presentation</b>"]
+    A["Sep 4, 2026<br/>Project Proposal"]
+    B["Oct 16, 2026<br/>Midpoint Evaluation"]
+    C["Nov 13, 2026<br/>Final Documentation & Presentation"]
 
     A -->|"Development & Implementation"| B
-    B -->|"Testing, Documentation & Presentation Preparation"| C
+    B -->|"Testing & Finalization"| C
 ```
 
-## Midpoint Evaluation — October 16, 2026
+### Project Deliverables
 
-For the Cloud Computing Midpoint Evaluation, the team is prioritizing AWS infrastructure, deployment automation, cloud architecture documentation, and a working prototype.
-
-This temporary milestone strategy allows us to demonstrate cloud computing concepts while continuing development of the full Recipe Suggestion App.
-
-See [Midpoint Evaluation Documentation](docs/midpoint/PROGRESS.md) for the implementation plan, architecture, progress, and submission requirements.
-
-[Click here to watch the demo video](https://www.youtube.com/watch?v=-jjEv46YW-0).
+- **Project Proposal — September 4, 2026:** Initial requirements, proposed features, technology stack, and architecture.
+- **Midpoint Evaluation — October 16, 2026:** AWS infrastructure development, deployment progress, and working application prototype. See [Midpoint Evaluation Documentation](docs/midpoint/PROGRESS.md) and [Midpoint Demo Video](https://www.youtube.com/watch?v=-jjEv46YW-0).
+- **Final Evaluation — November 13, 2026:** Completed application features, production AWS deployment, testing, documentation, and final presentation.
 
 ## Overview
 
-The Recipe Suggestion App is a cloud-based web application that helps users decide what to cook based on ingredients they already have.
+The Recipe Suggestion App helps users decide what to cook based on ingredients they already have.
 
-Users can maintain a personal inventory of available ingredients and receive recipe suggestions that make use of those ingredients. Recommendations can also consider dietary preferences, allergies, cuisine preferences, and other user-defined filters.
+Users can browse recipes, search and filter available options, and manage a personal ingredient inventory. Registered users can also manage dietary preferences and allergies, receive ingredient-based recipe suggestions, save recipes, and submit their own recipes.
 
-The project aims to help users save time and money while reducing unnecessary food waste.
+The application aims to simplify meal planning, encourage the use of available ingredients, and reduce unnecessary food waste.
 
-## Target Users
+### Target Users
 
-The primary target users are college students and individuals who want convenient and affordable meal ideas without spending significant time deciding what to cook or purchasing additional ingredients.
+The application primarily targets college students and individuals looking for convenient, affordable meal ideas without spending significant time planning meals or purchasing additional ingredients.
 
-## Core Features
+## Implemented Features
 
-The application is planned to support:
+### Recipe Discovery and Recommendations
 
-* User account creation and authentication.
-* Personalized user dashboard and logged-in experience.
-* User profile, preferences, and allergy management.
-* Personal ingredient inventory.
-* Recipe recommendations based on available ingredients.
-* Recipe search and filtering.
-* Recipe display and cooking instructions.
-* Manual recipe creation.
-* Recipe reviews and ratings.
-* Shopping list recommendations based on missing ingredients.
-* Dietary, allergy, cuisine, vegan, halal, and similar filters.
-* Recipe cost indicators.
-* Administrative account functionality.
-* Contact and customer support functionality.
+- Browse available recipes and view detailed cooking instructions.
+- Search and filter recipes by supported criteria, including cuisine, dietary preferences, allergens, and preparation time.
+- Receive recipe suggestions based on ingredients in a personal inventory.
+- Discover recipes using available-ingredient and partial-match recommendation modes.
 
-### Potential / Future Features
+### User Accounts and Personalization
 
-The following features are being considered but are not currently part of the committed system design:
+- User authentication through Amazon Cognito with Google Sign-In.
+- Personalized dashboard for authenticated users.
+- User profile and dietary preference management.
+- Allergy management and preference-based recipe filtering.
+- Personal ingredient inventory management.
+- Save and access favorite recipes.
+- Submit new recipes, including recipe images.
 
-* AI-generated recipes.
-* AI recipe assistant/chatbot.
-* Recipe scanning and automatic ingredient extraction.
-* Advanced interface customization.
-* Additional intelligent recommendation features.
+### Cloud Infrastructure
 
-The scope and implementation of these features will be determined based on project progress, available resources, and technical feasibility.
+- React frontend hosted through Amazon S3 and CloudFront.
+- Containerized Django REST Framework backend deployed on Amazon EC2.
+- Application Load Balancer and EC2 Auto Scaling for backend availability and scalability.
+- PostgreSQL database hosted on Amazon RDS.
+- Private Amazon S3 storage for recipe images.
+- Amazon ECR for Docker image storage.
+- CloudFormation templates for AWS infrastructure provisioning.
+- Private networking, security groups, and VPC endpoints for infrastructure security.
 
 ## High-Level Architecture
 
-The application will use a cloud-based client-server architecture.
+The application uses a cloud-based client-server architecture deployed on AWS.
 
-```text
-User
-  │
-  ▼
-React Web Frontend
-  │
-  │ REST API
-  ▼
-Django REST Framework
-  │
-  ├── Authentication & User Management
-  ├── Recipe Management
-  ├── Ingredient Inventory
-  ├── Recommendation System
-  ├── Reviews
-  └── Shopping Lists
-        │
-        ▼
-  ┌───────────────┐
-  │ Data & Media  │
-  │    Storage    │
-  └───────────────┘
+```mermaid
+flowchart TB
+    U["Users"] --> CF["Amazon CloudFront"]
+
+    CF --> FE["Amazon S3<br/>React Frontend"]
+    CF --> ALB["Internal Application Load Balancer<br/>via VPC Origin"]
+
+    ALB --> ASG["EC2 Auto Scaling Group<br/>Django REST Framework"]
+
+    ASG --> DB["Amazon RDS<br/>PostgreSQL"]
+    ASG --> MEDIA["Amazon S3<br/>Recipe Images"]
+
+    ECR["Amazon ECR<br/>Docker Images"] -.-> ASG
+
+    U --> COG["Amazon Cognito<br/>Google Sign-In"]
+    COG -.->|"JWT Authentication"| ASG
 ```
 
-The application will be deployed using Amazon Web Services (AWS).
+CloudFront serves the frontend from a private S3 bucket and routes API requests through a VPC origin to an internal Application Load Balancer. The load balancer distributes requests across containerized Django backend instances managed by an EC2 Auto Scaling Group.
+
+The backend communicates with Amazon RDS for persistent data storage and Amazon S3 for recipe images. Amazon Cognito provides user authentication, while Django handles application-level authorization and user data.
+
+The production environment also uses private subnets, VPC endpoints, security groups, NAT networking, and AWS Systems Manager to support secure infrastructure operations.
+
+For the complete infrastructure configuration, refer to the AWS architecture and deployment documentation.
 
 ## Technology Stack
 
 | Component | Technology |
-| --- | --- |
-| Cloud Platform | AWS |
-| Frontend | React |
-| Frontend Hosting | Amazon S3 + CloudFront |
-| Backend | Django + Django REST Framework |
-| Backend Deployment | Docker containers on AWS |
-| Database | PostgreSQL on Amazon RDS |
+|---|---|
+| Cloud Platform | Amazon Web Services (AWS) |
+| Frontend | React, Vite, React Router |
+| Frontend Hosting | Amazon S3, Amazon CloudFront |
+| Backend | Python, Django, Django REST Framework |
+| Backend Deployment | Docker, Amazon EC2 |
+| Load Balancing | Application Load Balancer |
+| Auto Scaling | Amazon EC2 Auto Scaling |
+| Database | PostgreSQL, Amazon RDS |
 | Media Storage | Amazon S3 |
-| Authentication | Amazon Cognito |
+| Container Registry | Amazon ECR |
+| Authentication | Amazon Cognito, Google Sign-In |
+| Infrastructure as Code | AWS CloudFormation |
+| Networking | Amazon VPC, NAT Gateway, VPC Endpoints |
 | API | REST |
-| Version Control | Git / GitHub |
-
-Detailed AWS infrastructure and deployment decisions are documented separately in the system design and AWS architecture documentation.
+| Version Control | Git, GitHub |
 
 ## Design Principles
 
-The project will follow several core software design principles:
+The application follows several software engineering and cloud architecture principles:
 
-- **Object-Oriented and Component-Based Design:** The application will apply object-oriented design principles across both frontend and backend development. Backend functionality will use clearly defined models, services, and responsibilities, while the frontend will use reusable and encapsulated React components and modules.
-- **Separation of Concerns:** Presentation, business logic, data access, and infrastructure responsibilities will remain separated.
-- **Modularity:** Major application functionality will be divided into independent and reusable modules.
-- **Reusability:** Common functionality and interface elements should be implemented as reusable components or services where appropriate.
-- **Scalability:** Components should be designed so they can be expanded as application requirements grow.
-- **Security:** Authentication, authorization, input validation, and secure credential management will be considered throughout development.
-- **Cloud-Based Design:** AWS services will be used where appropriate to support deployment, storage, scalability, monitoring, and other application requirements.
+- **Separation of Concerns:** Frontend presentation, backend business logic, database operations, and infrastructure configuration are maintained separately.
+- **Modularity:** Application functionality is organized into Django applications and reusable React components.
+- **Reusability:** Shared components and services reduce duplication and improve maintainability.
+- **Scalability:** EC2 Auto Scaling and load balancing allow the backend to support changing workloads.
+- **Security:** Private subnets, security groups, Cognito authentication, JWT validation, and managed secrets help protect application resources.
+- **Infrastructure as Code:** CloudFormation templates support consistent and repeatable AWS infrastructure deployment.
+
+## Testing and Validation
+
+The application was validated through backend automated tests, deployment verification, and API load testing.
+
+Testing activities included:
+
+- Django backend unit and integration tests.
+- Authentication and application functionality verification.
+- API load testing using ApacheBench with different concurrency levels.
+- EC2 and RDS resource utilization monitoring.
+- Auto Scaling Group and Application Load Balancer health verification.
+
+Detailed testing procedures and results are included in the final project documentation.
+
+## Future Improvements
+
+Potential improvements include:
+
+- Administrative management interface for users and recipes.
+- Recipe reviews and ratings.
+- Shopping list generation based on missing ingredients.
+- AI-powered recipe recommendations and conversational assistance.
+- Additional monitoring and security features, including CloudWatch enhancements and AWS WAF.
+- Multi-AZ database deployment and improved infrastructure redundancy.
+- Automated CI/CD pipelines.
+- Enhanced dietary and allergen filtering.
+
+These improvements are outside the scope of the completed course implementation.
 
 ## Project Documentation
 
-Detailed technical documentation is maintained separately from this README:
+Detailed project documentation is maintained in the `docs/` directory, covering requirements, system design, database design, API design, AWS architecture, and project evaluations.
 
-```text
-docs/
-├── requirements.md
-├── system-design.md
-├── database-design.md
-├── api-design.md
-└── aws-architecture.md
-```
+The main README provides a high-level overview of the completed application, while the supporting documentation contains implementation details, infrastructure decisions, and evaluation results.
 
-The main README provides a high-level overview of the project, while the documents under `docs/` contain implementation-level requirements and design decisions.
-
-## Project Structure
-
-The planned repository structure is:
+## Repository Structure
 
 ```text
 cloud_computing_proj/
@@ -146,8 +170,19 @@ cloud_computing_proj/
 ├── docs/
 ├── backend/
 ├── frontend/
-├── infrastructure/
-└── tests/
+└── infrastructure/
+    ├── ...
+    └── scripts/
 ```
 
-The structure may evolve as the system architecture and technology stack are finalized.
+## Project Documentation
+
+Detailed technical documentation is maintained in the `docs/` directory:
+
+- [Requirements](docs/requirements.md) — Functional and non-functional requirements.
+- [System Design](docs/system-design.md) — Application architecture, components, and design decisions.
+- [Database Design](docs/database-design.md) — Database models and relationships.
+- [API Design](docs/api-design.md) — REST API endpoints, request and response formats.
+- [AWS Architecture](docs/aws-architecture.md) — Cloud infrastructure, networking, security, and deployment.
+
+For implementation-specific information, refer to the [Frontend README](frontend/README.md) and [Backend README](backend/README.md).

@@ -1,1808 +1,277 @@
-# System Design
+# System Design — Recipe Suggestion App
 
-## 1. Purpose
+## 1. Overview
 
-This document describes the high-level software architecture of the Recipe Suggestion App.
+The Recipe Suggestion App is a cloud-based web application that helps users discover recipes based on available ingredients and personal preferences.
 
-The system is designed as a cloud-hosted web application with:
+The application follows a client-server architecture consisting of a React frontend, Django REST Framework backend, and PostgreSQL database. It is deployed on Amazon Web Services (AWS), with Amazon Cognito providing user authentication and Amazon S3 storing recipe images.
 
-- A React frontend.
-- A Django REST Framework backend.
-- PostgreSQL for persistent relational data.
-- Amazon Cognito for authentication.
-- External object storage for media.
-- Dockerized backend deployment.
-- AWS-based hosting and infrastructure.
+The backend uses a **modular monolith architecture**, separating application functionality into Django modules while maintaining a single backend deployment.
 
-The system is designed as a modular monolith for the initial implementation while preserving clear boundaries between major application domains.
+This design provides a maintainable application structure while supporting horizontal scaling through AWS infrastructure.
 
-This approach keeps the project manageable for the current team while allowing individual components to evolve or scale independently when necessary.
+## 2. High-Level Architecture
 
----
+The application consists of the following major components:
 
-# 2. High-Level Architecture
+| Component | Responsibility |
+|---|---|
+| React Frontend | User interface, navigation, forms, and API communication |
+| Django REST Framework | REST APIs, business logic, validation, and authorization |
+| PostgreSQL | Persistent relational application data |
+| Amazon Cognito | User authentication and Google Sign-In |
+| Amazon S3 | Frontend static files and recipe image storage |
+| AWS Infrastructure | Hosting, networking, load balancing, and scaling |
 
-The application follows a client-server architecture.
-
-```text
-                    User
-                     │
-                     ▼
-               Web Browser
-                     │
-                     ▼
-              React Frontend
-                     │
-                     │ HTTPS / REST / JSON
-                     ▼
-              Django REST API
-                     │
-          ┌──────────┼───────────┐
-          │          │           │
-          ▼          ▼           ▼
-     PostgreSQL   Media      Amazon Cognito
-                  Storage
-```
-
-The React frontend is responsible for user interaction and presentation.
-
-The Django backend is responsible for:
-
-- API behavior.
-- Business logic.
-- Authorization.
-- Resource ownership.
-- Data validation.
-- Recommendation logic.
-- Database interaction.
-- Integration with supporting cloud services.
-
-React shall not communicate directly with PostgreSQL.
-
-Persistent application data shall be accessed through backend APIs.
-
----
-
-# 3. Architectural Style
-
-The backend uses a modular-monolith architecture.
-
-```text
-Django Backend
-│
-├── Users
-├── Ingredients
-├── Recipes
-├── Inventory
-├── Recommendations
-├── Reviews
-└── Shopping
-```
-
-These domains remain part of one Django application deployment but maintain clear responsibilities.
-
-This approach was selected because:
-
-- The project is being developed by a small team.
-- The application does not initially require independent microservices.
-- Django applications provide useful modular boundaries.
-- Deployment remains simple.
-- Business logic can be centralized where appropriate.
-- Future architectural changes remain possible without introducing unnecessary complexity now.
-
-The project should avoid premature conversion to microservices.
-
----
-
-# 4. Major Application Domains
-
-## 4.1 Users
-
-The Users domain is responsible for application-specific user functionality.
-
-Responsibilities include:
-
-- Mapping authenticated Cognito identities to application Users.
-- User profiles.
-- User preferences.
-- User allergies.
-- Application permissions.
-- Administrative status.
-- User-specific authorization.
-
-Amazon Cognito remains responsible for authentication identity.
-
-Django remains responsible for application authorization.
-
----
-
-## 4.2 Ingredients
-
-The Ingredients domain manages canonical Ingredients used throughout the application.
-
-Responsibilities include:
-
-- Canonical Ingredient records.
-- Ingredient search.
-- Ingredient lookup.
-- Ingredient categories.
-- Ingredient normalization or resolution where supported.
-- Ingredient-to-Allergen relationships.
-
-Examples of canonical Ingredients include:
-
-```text
-Chicken Breast
-White Rice
-Egg
-Kimchi
-Soy Sauce
-Garlic
-Green Onion
-```
-
-The same Ingredient entities are reused by:
-
-```text
-Inventory
-Recipes
-Recommendations
-Shopping Lists
-Allergen relationships
-```
-
-The Ingredients domain therefore acts as a shared foundation rather than belonging only to Inventory.
-
----
-
-## 4.3 Recipes
-
-The Recipes domain manages recipe information.
-
-Responsibilities include:
-
-- Recipe creation.
-- Recipe ownership.
-- Recipe details.
-- Recipe ingredients.
-- Recipe classifications.
-- Recipe search and filtering.
-- Recipe modification.
-- Recipe deletion.
-- Saved-recipe relationships where appropriate.
-
-Recipes reference canonical Ingredients through `RecipeIngredient`.
-
-Recipes use standardized Tags for classifications such as:
-
-```text
-DIET
-CUISINE
-COST
-OTHER
-```
-
----
-
-## 4.4 Inventory
-
-The Inventory domain manages persistent Ingredient selections belonging to authenticated users.
-
-Responsibilities include:
-
-- Viewing saved inventory.
-- Adding canonical Ingredients.
-- Removing inventory items.
-- Providing saved inventory to RecommendationService.
-
-Guest Ingredient selections are temporary and do not create persistent Inventory records.
-
----
-
-## 4.5 Recommendations
-
-The Recommendations domain contains recipe-matching business logic.
-
-Responsibilities include:
-
-- `AVAILABLE_ONLY` matching.
-- `PARTIAL_MATCH` matching.
-- Match-score calculation.
-- Missing-Ingredient calculation.
-- Optional-Ingredient handling.
-- Tag filtering.
-- Allergen filtering.
-- Reusing the same recommendation logic for Guests and authenticated users.
-
-Recommendation results do not require persistent database storage for the initial implementation.
-
----
-
-## 4.6 Reviews
-
-The Reviews domain manages recipe ratings and comments.
-
-Responsibilities include:
-
-- Creating Reviews.
-- Reading Reviews.
-- Updating Reviews.
-- Deleting Reviews.
-- Review ownership.
-- Rating validation.
-- Administrative moderation.
-
-The initial design allows one active Review per User per Recipe.
-
----
-
-## 4.7 Shopping
-
-The Shopping domain manages shopping-list functionality.
-
-Responsibilities include:
-
-- Generating missing-Ingredient lists.
-- Temporary Guest shopping lists.
-- Persistent authenticated-user ShoppingLists.
-- ShoppingListItems.
-- Completion state.
-- Quantity and unit information where supported.
-
-ShoppingListItems reference the same canonical Ingredient entities used elsewhere in the application.
-
----
-
-# 5. Canonical Domain Data
-
-Three standardized concepts are especially important across the system:
-
-```text
-                  Canonical Application Data
-
-
-Ingredient                 Tag                 Allergen
-    │                        │                     │
-    ├── Inventory            ├── DIET              ├── Ingredient
-    ├── Recipes              ├── CUISINE           │
-    ├── Recommendations      ├── COST              └── UserAllergy
-    └── Shopping Lists       └── OTHER
-                             │
-                             ├── Recipe
-                             └── UserPreference
-```
-
-Their responsibilities are different.
-
-## 5.1 Ingredient
-
-Ingredient answers:
-
-> What food or ingredient is this?
-
-Examples:
-
-```text
-Chicken Breast
-Egg
-White Rice
-Soy Sauce
-```
-
-Ingredients are canonical shared entities.
-
----
-
-## 5.2 Tag
-
-Tag answers:
-
-> How is this Recipe or User preference classified?
-
-Examples:
-
-```text
-Vegan        [DIET]
-Halal        [DIET]
-Korean       [CUISINE]
-Vietnamese   [CUISINE]
-Cheap        [COST]
-Quick        [OTHER]
-```
-
-Tags are shared between Recipe classification and User preferences.
-
----
-
-## 5.3 Allergen
-
-Allergen answers:
-
-> What structured allergy relationship exists for this Ingredient?
-
-Examples:
-
-```text
-Peanut
-Milk
-Egg
-Wheat
-Soy
-Shellfish
-```
-
-Allergens are associated with Ingredients.
-
-Conceptually:
-
-```text
-Recipe
-   │
-   ▼
-RecipeIngredient
-   │
-   ▼
-Ingredient
-   │
-   ▼
-Allergen
-```
-
-Allergy filtering should not depend only on manually assigned Recipe Tags.
-
----
-
-# 6. Backend Structure
-
-The Django backend should be organized around application domains.
-
-Conceptually:
-
-```text
-backend/
-│
-├── config/
-│
-├── apps/
-│   ├── users/
-│   ├── ingredients/
-│   ├── recipes/
-│   ├── inventory/
-│   ├── recommendations/
-│   ├── reviews/
-│   └── shopping/
-│
-├── manage.py
-└── requirements/
-```
-
-Each Django application should contain the files appropriate to its responsibility.
-
-For example:
-
-```text
-apps/ingredients/
-│
-├── models.py
-├── serializers.py
-├── views.py
-├── urls.py
-├── admin.py
-└── tests/
-```
-
-Not every conceptual domain object requires a separate Django application.
-
-For example, Tags and Allergens may initially live within the most appropriate existing application rather than introducing additional Django apps purely for structural symmetry.
-
-Separate applications should be introduced only when their responsibilities justify the additional complexity.
-
----
-
-# 7. Backend Layering
-
-Backend request processing should follow a clear flow.
-
-```text
-HTTP Request
-     │
-     ▼
-API / View Layer
-     │
-     ▼
-Business / Service Layer
-     │
-     ▼
-Domain / Models
-     │
-     ▼
-Persistence
-```
-
-## 7.1 API / View Layer
-
-Responsible for:
-
-- Receiving requests.
-- Authentication integration.
-- Parsing input.
-- Basic request validation.
-- Calling appropriate business logic.
-- Serializing responses.
-- Returning HTTP status codes.
-
-Views should avoid containing large amounts of business logic.
-
----
-
-## 7.2 Business / Service Layer
-
-The service layer contains application workflows and business rules that should not be duplicated across views.
-
-Examples include:
-
-```text
-RecommendationService
-ShoppingListService
-IngredientResolutionService
-```
-
-Additional services may be introduced where application complexity justifies them.
-
----
-
-## 7.3 Domain / Model Layer
-
-The domain/model layer represents persistent application concepts and relationships.
-
-Examples include:
-
-```text
-User
-UserProfile
-Ingredient
-InventoryItem
-Recipe
-RecipeIngredient
-SavedRecipe
-Tag
-UserPreference
-Allergen
-UserAllergy
-Review
-ShoppingList
-ShoppingListItem
-```
-
-Detailed relationships are defined in `database-design.md`.
-
----
-
-# 8. Frontend Architecture
-
-The React frontend should use a feature-oriented organization.
-
-Conceptually:
-
-```text
-frontend/src/
-│
-├── app/
-│
-├── components/
-│   ├── common/
-│   └── layout/
-│
-├── features/
-│   ├── ingredients/
-│   ├── recommendations/
-│   ├── recipes/
-│   ├── inventory/
-│   ├── profile/
-│   ├── reviews/
-│   └── shopping/
-│
-├── pages/
-│
-├── services/
-│
-└── App.jsx
-```
-
-The exact structure may evolve as implementation progresses.
-
----
-
-# 9. Frontend Responsibilities
-
-React is responsible for:
-
-- Rendering pages.
-- Handling user interactions.
-- Routing.
-- Form state.
-- Temporary Guest state.
-- Calling backend APIs.
-- Displaying validation errors.
-- Displaying recommendation results.
-- Presenting authenticated-user functionality.
-
-React should not contain authoritative implementations of backend business rules.
-
-For example, React should not independently determine:
-
-- Whether a Recipe qualifies for `AVAILABLE_ONLY`.
-- The authoritative recommendation match score.
-- Whether a Recipe is safe for a saved allergy.
-- Whether a User owns a Recipe.
-- Whether a User has administrative permission.
-
-Those decisions belong to Django.
-
----
-
-# 10. API Service Layer in React
-
-Frontend API calls should be centralized rather than scattered throughout components.
-
-Conceptually:
-
-```text
-React Component
-      │
-      ▼
-Feature Service
-      │
-      ▼
-Shared API Client
-      │
-      ▼
-Django REST API
-```
-
-Examples:
-
-```text
-ingredientService
-recipeService
-recommendationService
-inventoryService
-userService
-shoppingListService
-```
-
-A shared API client may manage:
-
-- Base API URL.
-- JSON handling.
-- Authentication headers.
-- Common error handling.
-
-Detailed endpoint contracts are documented in `api-design.md`.
-
----
-
-# 11. Authentication Architecture
-
-Amazon Cognito provides authentication identity.
-
-Django maintains the application-specific User and authorization model.
-
-Conceptually:
+### Application Flow
 
 ```text
 User
  │
  ▼
-React
+Amazon CloudFront
  │
- ▼
-Amazon Cognito
+ ├── React Frontend (Private S3)
  │
- │ Authenticate
- ▼
-Authentication Identity / Token
- │
- ▼
-React
- │
- │ Authenticated API Request
- ▼
-Django
- │
- │ Validate Identity
- ▼
-Application User
+ └── /api/* → Internal Application Load Balancer
+                   │
+                   ▼
+             Django REST API
+             (EC2 Auto Scaling)
+                   │
+          ┌────────┴─────────┐
+          │                  │
+          ▼                  ▼
+    PostgreSQL RDS      S3 Media Storage
+
+Authentication: Amazon Cognito + Google Sign-In
 ```
 
-The application User is associated with the corresponding Cognito identity using a stable external identifier.
+CloudFront serves the frontend from a private S3 bucket and routes API requests to the backend through a VPC origin.
 
-Authentication credentials are not stored in application-specific PostgreSQL User records.
+The Django backend handles application logic and communicates with PostgreSQL and S3 for persistent storage.
 
----
+Detailed AWS infrastructure and networking are documented in [AWS Architecture](aws-architecture.md).
 
-# 12. Authentication vs. Authorization
+## 3. Backend Architecture
 
-Authentication and authorization have separate responsibilities.
+The backend is developed using Django and Django REST Framework. It follows a modular architecture with functionality separated into five Django applications.
 
-```text
-Amazon Cognito
-      │
-      └── Who is this user?
+| Django App | Responsibility |
+|---|---|
+| `users` | User profiles, Cognito identity mapping, preferences, allergies, and permissions |
+| `ingredients` | Ingredient records, tags, and allergen data |
+| `recipes` | Recipe management, submissions, recipe ingredients, and saved recipes |
+| `inventory` | Personal ingredient inventory management |
+| `recommendations` | Ingredient-based recipe matching and filtering |
 
+Each module contains its own models, serializers, views, and business logic as appropriate.
 
-Django
-      │
-      └── What may this user do?
-```
+The backend is responsible for request validation, application authorization, resource ownership, recommendation calculations, and database operations.
 
-Cognito handles authentication.
+### Design Principles
 
-Django handles:
+- **Modularity:** Application domains are organized into separate Django applications.
+- **Separation of Concerns:** Frontend presentation, backend logic, and data storage remain independent.
+- **Reusability:** Shared models and services are reused across application features.
+- **Stateless Deployment:** Persistent application data is stored outside individual backend containers.
+- **Scalability:** Multiple backend instances can serve requests through a load balancer.
 
-- Resource ownership.
-- Application permissions.
-- Administrative privileges.
-- Private-data access.
-- Protected API operations.
+## 4. Frontend Architecture
 
-React may hide unavailable UI functionality, but React is not a security boundary.
+The frontend is developed using React, Vite, and React Router.
 
----
+It follows a component-based architecture that separates reusable UI components, application pages, feature-specific functionality, and API communication.
 
-# 13. Application User Mapping
+The frontend provides:
 
-After Django validates a Cognito-authenticated request, it maps the identity to an application User.
+- Recipe browsing, searching, and filtering.
+- Ingredient-based recipe discovery.
+- Personal ingredient inventory management.
+- User dashboard and profile settings.
+- Dietary preference and allergy management.
+- Saved recipes and recipe submission.
+- Authentication through Amazon Cognito.
 
-Conceptually:
+The frontend communicates with Django through REST APIs using a shared API client.
 
-```text
-Validated Cognito Identity
-           │
-           │ stable external identifier
-           ▼
-     Application User
-           │
-           ├── Profile
-           ├── Inventory
-           ├── Preferences
-           ├── Allergies
-           ├── Saved Recipes
-           ├── Reviews
-           └── Shopping Lists
-```
+Business logic such as recipe matching, permission enforcement, and persistent data management remains in the backend.
 
-This separation prevents Cognito from becoming the storage system for application-specific domain data.
+## 5. Authentication and Authorization
 
----
+Authentication is provided by **Amazon Cognito User Pools**, with Google federation supported through Cognito's hosted authentication interface.
 
-# 14. Authorization and Resource Ownership
+The frontend uses the OAuth 2.0 Authorization Code flow with PKCE.
 
-The backend derives resource ownership from authenticated identity.
-
-The frontend should not be trusted to submit ownership information for resources whose owner can be determined from authentication.
-
-For example:
-
-```text
-POST Recipe
-     │
-     ▼
-Authenticated User
-     │
-     ▼
-Recipe.owner
-```
-
-The client does not determine `owner_id`.
-
-Similarly:
-
-```text
-Authenticated User
-       │
-       ├── InventoryItem.user
-       ├── SavedRecipe.user
-       ├── Review.user
-       └── ShoppingList.user
-```
-
-Typical authorization behavior:
-
-```text
-Recipe Read
-    │
-    └── Public
-
-Recipe Create
-    │
-    └── Registered User
-
-Recipe Update/Delete
-    │
-    ├── Owner
-    └── Administrator
-```
-
-And:
-
-```text
-User A → User A private resource
-✓ Allowed where applicable
-
-User A → User B private resource
-✗ Forbidden
-
-Administrator → protected administrative operation
-✓ Allowed with required permission
-```
-
-All authorization checks must be enforced by Django.
-
----
-
-# 15. Guest Architecture
-
-Guests can use the main recommendation workflow without creating an account.
-
-Guest state remains temporary.
-
-Conceptually:
-
-```text
-Guest
- │
- ▼
-React Temporary State
- │
- ├── Ingredient IDs
- ├── Tag Filters
- ├── Allergen Filters
- └── Match Mode
- │
- ▼
-Recommendation API
- │
- ▼
-RecommendationService
-```
-
-Guest state may be stored temporarily in:
-
-- React component state.
-- React application state.
-- Browser session storage.
-- Another appropriate non-persistent client mechanism.
-
-Guest data does not require persistent PostgreSQL User records.
-
----
-
-# 16. Registered User Architecture
-
-Registered Users use the same core services but may persist data.
-
-```text
-Authenticated User
-      │
-      ▼
-Django Application User
-      │
-      ├── Profile
-      ├── Inventory
-      ├── UserPreferences
-      ├── UserAllergies
-      ├── SavedRecipes
-      ├── Reviews
-      └── ShoppingLists
-```
-
-The recommendation algorithm remains shared between Guests and Registered Users.
-
-Only the source and persistence of input data differ.
-
----
-
-# 17. Onboarding Architecture
-
-Onboarding is optional.
-
-After account creation, the application may ask for:
-
-```text
-Optional Onboarding
-      │
-      ├── Allergies
-      ├── Diet Preferences
-      ├── Cuisine Preferences
-      ├── Cost Preferences
-      └── Other Supported Preferences
-```
-
-Internally:
-
-```text
-Diet / Cuisine / Cost / Other
-             │
-             ▼
-            Tag
-             │
-             ▼
-       UserPreference
-```
-
-Allergy selections use standardized `Allergen` entities rather than Tags.
-
-```text
-Allergy Selection
-       │
-       ▼
-    Allergen
-       │
-       ▼
-   UserAllergy
-```
-
-Users who skip onboarding may configure the same information later.
-
----
-
-# 18. Recommendation Architecture
-
-Recommendation logic belongs in the backend.
-
-Both Guests and authenticated users use the same `RecommendationService`.
-
-```text
-Guest Ingredients ─────────────┐
-                               │
-                               ▼
-                      RecommendationService
-                               ▲
-                               │
-Saved User Inventory ──────────┘
-```
-
-The difference is where Ingredient data comes from.
-
----
-
-# 19. Recommendation Input
-
-The recommendation service receives normalized input.
-
-Conceptually:
-
-```text
-RecommendationInput
-│
-├── ingredients
-│
-├── match_mode
-│      ├── AVAILABLE_ONLY
-│      └── PARTIAL_MATCH
-│
-├── allergen_ids
-├── tag_ids
-└── other supported filters
-```
-
-Ingredients should use canonical Ingredient identities whenever possible.
-
-Tags represent standardized classifications and preferences.
-
-Allergens remain structured separately from Tags.
-
----
-
-# 20. Guest Recommendation Flow
-
-```text
-Guest
- │
- ▼
-Select / Enter Ingredients
- │
- ▼
-Ingredient Search / Resolution
- │
- ▼
-Canonical Ingredient IDs
- │
- ├── Temporary Tag Filters
- ├── Temporary Allergen Filters
- └── Match Mode
- │
- ▼
-POST /api/recommendations/
- │
- ▼
-RecommendationService
- │
- ▼
-Recipe Results
-```
-
-The Guest does not need a persistent inventory.
-
----
-
-# 21. Registered User Recommendation Flow
-
-An authenticated user may use saved application information.
-
-```text
-Saved Inventory ──────────────┐
-                              │
-Saved Allergies ──────────────┤
-                              │
-Saved Tag Preferences ────────┼──→ RecommendationInput
-                              │
-Current Search Filters ───────┘
-```
-
-The backend can derive saved data from the authenticated User.
-
-React does not need to repeatedly send persistent User data when the backend can obtain it directly.
-
-An authenticated user may still perform a temporary recommendation search using directly supplied Ingredient IDs without changing saved inventory.
-
----
-
-# 22. AVAILABLE_ONLY Mode
-
-In `AVAILABLE_ONLY` mode, every required Recipe Ingredient must be available.
-
-Conceptually:
-
-```text
-Required Recipe Ingredients ⊆ Available Ingredients
-```
-
-Example:
-
-```text
-Available:
-Egg
-Cabbage
-Soy Sauce
-Kimchi
-
-Recipe A:
-Egg
-Soy Sauce
-→ Eligible
-
-Recipe B:
-Egg
-Rice
-→ Not Eligible
-```
-
-Optional RecipeIngredients do not determine eligibility.
-
----
-
-# 23. PARTIAL_MATCH Mode
-
-In `PARTIAL_MATCH` mode, a Recipe may be returned when at least one required Recipe Ingredient overlaps with the available Ingredients.
-
-Conceptually:
-
-```text
-Required Recipe Ingredients ∩ Available Ingredients ≠ ∅
-```
-
-The RecommendationService identifies:
-
-- Available Ingredients.
-- Missing Ingredients.
-- Optional missing Ingredients.
-- Match score.
-
-Example:
-
-```text
-Kimchi Fried Rice
-
-Available:
-✓ Kimchi
-✓ Egg
-✓ Soy Sauce
-
-Missing:
-✗ White Rice
-✗ Green Onion
-```
-
----
-
-# 24. Recommendation Scoring
-
-An initial match score may be calculated as:
-
-```text
-              Available Required Ingredients
-Match Score = ------------------------------
-                Total Required Ingredients
-```
-
-Example:
-
-```text
-Available Required Ingredients = 3
-Total Required Ingredients     = 5
-
-Match Score = 3 / 5 = 60%
-```
-
-The scoring algorithm may evolve later without changing the overall architecture.
-
-React should display the score returned by the backend rather than independently recalculating the authoritative score.
-
----
-
-# 25. Recommendation Result
-
-Conceptually:
-
-```text
-RecommendationResult
-│
-├── recipe
-├── match_score
-├── available_ingredients
-├── missing_ingredients
-└── optional_missing_ingredients
-```
-
-Recommendation results do not need to be persisted initially.
-
-They may be calculated dynamically for each request.
-
-Persistent recommendation history or analytics may be introduced later if required.
-
----
-
-# 26. Ingredient Resolution Architecture
-
-User-entered Ingredient descriptions should be mapped to canonical Ingredients whenever possible.
-
-```text
-User Input
-"Tyson Frozen Chicken Breast"
-             │
-             ▼
-Ingredient Search / Resolution
-             │
-             ▼
-Canonical Ingredient
-"Chicken Breast"
-             │
-             ▼
-RecommendationService
-```
-
-The system should not treat storage condition, brand, or packaging as separate Ingredients unless those distinctions materially affect recipe usage.
-
-However, materially different foods should remain separate.
-
-For example:
-
-```text
-Chicken Breast
-Chicken Thigh
-Ground Chicken
-Whole Chicken
-```
-
-are separate canonical Ingredients.
-
----
-
-# 27. Tag Architecture
-
-Tags provide a common classification vocabulary.
-
-```text
-                       Tag
-                        │
-          ┌─────────────┼─────────────┐
-          │             │             │
-          ▼             ▼             ▼
-        DIET          CUISINE        COST
-          │
-          └────────────────────────── OTHER
-```
-
-Examples:
-
-```text
-Vegan       [DIET]
-Halal       [DIET]
-Korean      [CUISINE]
-Vietnamese  [CUISINE]
-Cheap       [COST]
-Quick       [OTHER]
-```
-
-Tags are reused by both Recipes and User preferences.
+### Authentication Flow
 
 ```text
 User
  │
  ▼
-UserPreference
+React Frontend
  │
  ▼
-Tag
- ▲
- │
-Recipe
-```
-
-This ensures that user preferences and Recipe classifications use the same standardized vocabulary.
-
----
-
-# 28. Allergen Architecture
-
-Allergens are separate from Tags.
-
-```text
-User
+Amazon Cognito / Google Sign-In
  │
  ▼
-UserAllergy
+Authorization Code + PKCE
  │
  ▼
-Allergen
- ▲
- │
-Ingredient
-```
-
-Recipe allergen information can be determined through Recipe Ingredients.
-
-```text
-Recipe
-   │
-   ▼
-RecipeIngredient
-   │
-   ▼
-Ingredient
-   │
-   ▼
-Allergen
-```
-
-This avoids relying solely on manually assigned labels such as `"Peanut-Free"` for allergy-related filtering.
-
----
-
-# 29. Shopping List Architecture
-
-Shopping-list generation uses canonical Ingredient information produced by recipe matching.
-
-```text
-Selected Recipe
-      │
-      ▼
-RecipeIngredient
-      │
-      │ compare
-      ▼
-Available Ingredients
-      │
-      ▼
-Missing Ingredients
-      │
-      ▼
-ShoppingListService
-```
-
-For Guests:
-
-```text
-Missing Ingredients
-       │
-       ▼
-Temporary Shopping List
-```
-
-For authenticated users:
-
-```text
-Missing Ingredients
-       │
-       ▼
-ShoppingListService
-       │
-       ▼
-ShoppingList
-       │
-       ▼
-ShoppingListItem
-       │
-       ▼
-Ingredient
-```
-
-This avoids duplicating Ingredient representations.
-
----
-
-# 30. Review Architecture
-
-Reviews belong to authenticated Users and Recipes.
-
-```text
-User
+Cognito Access Token
  │
  ▼
-Review
+React API Client
  │
  ▼
-Recipe
-```
-
-The backend derives the Review author from authenticated identity.
-
-A normal user may modify or delete only their own Review.
-
-Administrators may receive broader moderation permissions.
-
-The initial design allows at most one active Review per User per Recipe.
-
----
-
-# 31. Saved Recipe Architecture
-
-Saved Recipes represent a relationship between an authenticated User and a Recipe.
-
-```text
-User
+Django REST Framework
  │
- ▼
-SavedRecipe
- │
- ▼
-Recipe
+ ├── Validate Cognito JWT
+ ├── Map Cognito identity to Django User
+ └── Enforce application permissions
 ```
 
-The backend derives the User from authentication.
+The frontend sends the Cognito access token in authenticated API requests.
 
-Guests cannot persist SavedRecipe relationships.
-
----
-
-# 32. Media Architecture
-
-Images should not be stored directly in PostgreSQL.
-
-Conceptually:
-
-```text
-React
- │
- ▼
-Django API
- │
- ├── PostgreSQL
- │      └── Media Reference
- │
- └── Object Storage
-        └── Image File
+```http
+Authorization: Bearer <access_token>
 ```
 
-Examples include:
+Django validates the token's signature, issuer, expiration, token type, and application client ID.
 
-- Recipe images.
-- User profile images.
+Authenticated identities are mapped to local application users using the Cognito issuer and subject (`sub`).
 
-The database stores the information required to reference the media object.
+### User Access
 
-Detailed AWS media infrastructure is defined in `aws-architecture.md`.
+| User Type | Supported Functionality |
+|---|---|
+| Guest | Browse, search, filter, and discover recipes |
+| Registered User | Guest features plus personal inventory, preferences, allergies, saved recipes, and recipe submission |
+| Administrator | Application-level administrative permissions where implemented |
 
----
+The dedicated administrative management interface remains future development.
 
-# 33. Database Architecture
+Django enforces authorization and resource ownership. The frontend may hide protected actions but is not responsible for authoritative permission decisions.
 
-PostgreSQL stores persistent relational application data.
+## 6. Recipe and Ingredient Management
 
-Examples include:
+Recipes are stored in PostgreSQL and associated with canonical Ingredient records through RecipeIngredient relationships.
 
-```text
-Users
-Profiles
-Ingredients
-Inventories
-Recipes
-RecipeIngredients
-SavedRecipes
-Tags
-UserPreferences
-Allergens
-UserAllergies
-Reviews
-ShoppingLists
-ShoppingListItems
-```
+Recipe information includes ingredients, cooking instructions, classifications, and associated images.
 
-PostgreSQL does not store:
+The application supports recipe browsing, searching, filtering, and authenticated recipe submission.
 
-```text
-Authentication passwords
-Large image binaries
-Temporary Guest state
-Temporary recommendation results
-```
+Submitted recipes are associated with the authenticated user, and duplicate recipe names are checked during submission.
 
-Authentication passwords belong to Cognito.
+### Initial Recipe Data
 
-Images belong to external media storage.
+The production database was populated using [TheMealDB API](https://www.themealdb.com/api.php) to provide an initial dataset for application functionality and testing.
 
-Temporary Guest and recommendation state may remain transient.
+The imported dataset contains **100 recipes with associated images**.
 
----
+Recipe images are stored in Amazon S3, while PostgreSQL stores the corresponding application data and media references.
 
-# 34. Stateless Backend Design
+## 7. Recipe Recommendation System
 
-The backend should avoid unnecessary dependence on local server state.
+The recommendation system matches recipes against ingredients selected by users or stored in their personal inventories.
 
-Persistent application state belongs in external systems such as:
+The backend supports two matching modes:
 
-```text
-PostgreSQL
-Object Storage
-Amazon Cognito
-```
+| Mode | Behavior |
+|---|---|
+| `AVAILABLE_ONLY` | Returns recipes whose required ingredients are all available |
+| `PARTIAL_MATCH` | Returns recipes with at least one matching required ingredient |
 
-The Django container should not become the authoritative location for persistent application information.
+Recommendation results can include matching and missing ingredient information.
 
-Conceptually:
+The recommendation system also supports filtering based on recipe classifications and allergens.
 
-```text
-             ┌── Django Instance A ──┐
-Request ─────┤                       ├── PostgreSQL
-             └── Django Instance B ──┘
-                         │
-                         └────────────── Object Storage
-```
+Authenticated users can save their dietary preferences and allergies, which are automatically considered during applicable recipe browsing and filtering.
 
-This allows future horizontal scaling.
+Recommendation calculations are performed in Django rather than React.
 
-The initial deployment may use only one Django backend instance.
+## 8. Database and Media Storage
 
----
+### PostgreSQL
 
-# 35. Scalability Architecture
+Amazon RDS PostgreSQL stores persistent application data, including:
 
-The initial application does not require a distributed microservice architecture.
+- User accounts and profiles.
+- Ingredients and recipe information.
+- RecipeIngredient relationships.
+- Personal inventories.
+- Dietary preferences and allergies.
+- Saved recipes and recipe ownership.
 
-Instead, it should be designed so that future scaling does not require rewriting the entire system.
+Database relationships and models are described in [Database Design](database-design.md).
 
-Initial deployment:
+### Amazon S3
 
-```text
-Client
-  │
-  ▼
-Frontend
-  │
-  ▼
-Single Django Backend Instance
-  │
-  ▼
-PostgreSQL
-```
+A private Amazon S3 bucket stores recipe images.
 
-Future scaling may introduce:
+The backend accesses media storage using AWS permissions and stores media references in the database rather than storing image binaries directly.
 
-```text
-Clients
-   │
-   ▼
-Load Balancer
-   │
-   ├── Django Instance A
-   ├── Django Instance B
-   └── Django Instance C
-              │
-              ▼
-          PostgreSQL
-```
+This separates persistent storage from individual backend instances.
 
-This is possible because persistent application state is external to individual backend instances.
+## 9. Production Deployment and Scalability
 
----
+The application is deployed on AWS using CloudFormation-managed infrastructure.
 
-# 36. Docker Architecture
+### Frontend
 
-The Django backend is containerized.
+The React application is built into static files and stored in a private Amazon S3 bucket. Amazon CloudFront serves the application using Origin Access Control (OAC).
 
-Conceptually:
+### Backend
 
-```text
-Django Source
-     │
-     ▼
-Docker Image
-     │
-     ▼
-Backend Container
-```
+The Django backend runs inside Docker containers on Amazon EC2 instances.
 
-The container contains application runtime code and dependencies.
+An EC2 Auto Scaling Group maintains two backend instances across two Availability Zones, with a maximum capacity of three instances.
 
-It does not contain the authoritative persistent database or media files.
+An internal Application Load Balancer distributes incoming API requests across healthy backend instances.
 
-```text
-Backend Container
-      │
-      ├── PostgreSQL
-      ├── Object Storage
-      └── Cognito
-```
+### Networking and Security
 
-This provides a consistent runtime between development and cloud deployment.
+The production infrastructure includes:
 
----
+- Private application subnets for backend instances.
+- An internal Application Load Balancer.
+- Amazon RDS in private networking.
+- VPC endpoints for supported AWS service communication.
+- A NAT Gateway for required outbound internet access.
+- AWS Systems Manager for private instance management.
+- IAM roles and security groups for controlled access.
 
-# 37. Development Architecture
+Docker images are stored in Amazon ECR and pulled by backend instances through VPC endpoints.
 
-During local development, the application may run as:
+Additional infrastructure details are documented in [AWS Architecture](aws-architecture.md).
 
-```text
-Developer Machine
-│
-├── React Development Server
-│
-└── Django Backend
-       │
-       └── Development Database
-```
+## 10. Testing and Validation
 
-Docker may be used to provide a consistent backend runtime.
+The application was validated through automated backend tests, functional verification, and API load testing.
 
-The local environment should remain sufficiently similar to cloud deployment to reduce environment-specific problems.
+The final backend test run completed with **359 successful tests and one skipped test**.
 
----
+ApacheBench was used to evaluate API behavior under different concurrency levels, including 10, 50, and 100 concurrent requests.
 
-# 38. Production Architecture
+AWS resource utilization and backend health were also monitored to verify that the deployed application remained operational.
 
-At a high level, production follows:
+## 11. Future Improvements
 
-```text
-Users
-  │
-  ▼
-Frontend Hosting
-  │
-  ▼
-Django Backend
-  │
-  ├── PostgreSQL Database
-  ├── Media Storage
-  └── Amazon Cognito
-```
+Potential future development includes:
 
-The exact AWS services, network configuration, deployment process, monitoring, and scaling strategy are defined in `aws-architecture.md`.
+- Administrative management interface.
+- Recipe reviews and ratings.
+- Shopping list functionality.
+- AI-powered recipe recommendations and assistant.
+- Enhanced allergen information and filtering.
+- Additional monitoring and security controls.
+- Multi-AZ RDS deployment.
+- Improved infrastructure redundancy and CI/CD automation.
 
----
+## 12. Related Documentation
 
-# 39. Security Boundaries
-
-The system contains several important security boundaries.
-
-## 39.1 Browser Boundary
-
-React runs in the user's browser and must not be trusted with authoritative security decisions.
-
----
-
-## 39.2 Authentication Boundary
-
-Amazon Cognito establishes authenticated identity.
-
----
-
-## 39.3 Authorization Boundary
-
-Django determines what authenticated users are allowed to access or modify.
-
----
-
-## 39.4 Persistence Boundary
-
-Persistent application data is stored in controlled backend systems rather than trusted directly from client state.
-
----
-
-## 39.5 Media Boundary
-
-Uploaded files should be handled through controlled application/storage mechanisms.
-
-The database should store references rather than arbitrary binary data.
-
----
-
-# 40. Testing Architecture
-
-Testing occurs at multiple layers.
-
-```text
-Frontend Tests
-      │
-      ▼
-API Tests
-      │
-      ▼
-Service / Business Logic Tests
-      │
-      ▼
-Model / Database Tests
-```
-
-Backend tests should cover:
-
-- Authentication integration.
-- Authorization.
-- Resource ownership.
-- Ingredient behavior.
-- Tag behavior.
-- Allergen behavior.
-- Inventory.
-- Recipes.
-- Recommendation modes.
-- Recommendation scoring.
-- Saved Recipes.
-- Reviews.
-- Shopping Lists.
-
-Postman may be used for manual API testing.
-
-Automated Django/DRF tests should verify important backend behavior.
-
-GitHub Actions may run automated tests during integration.
-
----
-
-# 41. Key End-to-End Flow: Guest Recommendation
-
-```text
-Guest
-  │
-  ▼
-React Ingredient Selection
-  │
-  ▼
-Canonical Ingredient IDs
-  │
-  ├── Tag Filters
-  ├── Allergen Filters
-  └── Match Mode
-  │
-  ▼
-Django Recommendation API
-  │
-  ▼
-RecommendationService
-  │
-  ▼
-RecipeIngredient / Ingredient / Tag / Allergen Data
-  │
-  ▼
-Recommendation Results
-  │
-  ▼
-React
-```
-
-No persistent User account is required.
-
----
-
-# 42. Key End-to-End Flow: Registered User Recommendation
-
-```text
-Registered User
-      │
-      ▼
-Amazon Cognito
-      │
-      ▼
-Authenticated Request
-      │
-      ▼
-Django
-      │
-      ▼
-Application User
-      │
-      ├── Saved Inventory
-      ├── Saved Tag Preferences
-      └── Saved Allergies
-      │
-      ▼
-RecommendationService
-      │
-      ▼
-Recipe Results
-      │
-      ▼
-React
-```
-
-The same RecommendationService is used for Guest and authenticated workflows.
-
----
-
-# 43. Key End-to-End Flow: Recipe Creation
-
-```text
-Registered User
-      │
-      ▼
-Amazon Cognito
-      │
-      ▼
-React Recipe Form
-      │
-      ├── Recipe Information
-      ├── Canonical Ingredient IDs
-      └── Tag IDs
-      │
-      ▼
-POST /api/recipes/
-      │
-      ▼
-Django Authorization
-      │
-      ▼
-Recipe.owner = Authenticated User
-      │
-      ▼
-Recipe
- ├── RecipeIngredient
- └── Tag
-```
-
-The frontend does not submit authoritative ownership information.
-
----
-
-# 44. Key End-to-End Flow: Shopping List
-
-```text
-Recipe
-  │
-  ▼
-RecipeIngredient
-  │
-  │ compare against
-  ▼
-Available Ingredients
-  │
-  ▼
-Missing Ingredients
-  │
-  ▼
-ShoppingListService
-  │
-  ├── Guest → Temporary List
-  │
-  └── User  → Persistent ShoppingList
-```
-
-All ShoppingListItems continue to reference canonical Ingredients.
-
----
-
-# 45. Core Architectural Rules
-
-The implementation should follow these rules:
-
-1. React shall not access PostgreSQL directly.
-2. Cognito handles authentication identity.
-3. Django handles authorization and ownership.
-4. Client-provided ownership information shall not be trusted.
-5. Persistent domain relationships should use canonical IDs.
-6. Ingredient is the shared food representation across application domains.
-7. Tags classify Recipes and represent persistent User preferences.
-8. Allergens remain structured separately from Tags.
-9. Guest and Registered User recommendation logic shall remain shared.
-10. Business logic belongs in backend services rather than React.
-11. Persistent state shall not depend on a specific Django instance.
-12. Media binaries shall remain outside PostgreSQL.
-13. The initial architecture should remain simple enough for the team to implement and maintain.
-14. Future scalability should be supported without prematurely introducing microservices.
-
----
-
-# 46. Architecture Summary
-
-The overall system can be summarized as:
-
-```text
-                         User
-                          │
-                          ▼
-                     React Frontend
-                          │
-                          │ REST / JSON
-                          ▼
-                    Django REST API
-                          │
-          ┌───────────────┼────────────────┐
-          │               │                │
-          ▼               ▼                ▼
-   Authorization     Service Layer     Cognito
-          │               │          Authentication
-          │               │
-          │        ┌──────┼─────────┐
-          │        │      │         │
-          ▼        ▼      ▼         ▼
-       User   Ingredients Recipes Recommendations
-          │        │      │         │
-          │        └──────┼─────────┘
-          │               │
-          ▼               ▼
-      PostgreSQL      Shopping Logic
-                          │
-                          ▼
-                    Media / Storage
-```
-
-The architecture intentionally separates:
-
-```text
-Authentication
-      ↓
-Amazon Cognito
-
-Authorization + Business Logic
-      ↓
-Django
-
-Persistent Relational Data
-      ↓
-PostgreSQL
-
-Media
-      ↓
-Object Storage
-
-Presentation
-      ↓
-React
-```
-
-This separation provides a clear, maintainable foundation for the initial implementation while supporting future scaling.
-
----
-
-# 47. Related Documentation
-
-```text
-requirements.md
-    ↓
-What must the application do?
-
-database-design.md
-    ↓
-How is persistent application data represented?
-
-api-design.md
-    ↓
-How does React interact with Django?
-
-system-design.md
-    ↓
-How do application components work together?
-
-aws-architecture.md
-    ↓
-How is the system deployed in AWS?
-```
+- [Requirements](requirements.md) — Original project requirements.
+- [Database Design](database-design.md) — Persistent models and relationships.
+- [API Design](api-design.md) — REST API contracts and endpoints.
+- [AWS Architecture](aws-architecture.md) — Infrastructure, networking, and deployment.
+- [Main README](../README.md) — Project overview.
