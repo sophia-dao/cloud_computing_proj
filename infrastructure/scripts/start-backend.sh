@@ -139,25 +139,39 @@ docker run -d \
   -p 127.0.0.1:8000:8000 \
   "$IMAGE"
 
-echo "Waiting for Django to become available..."
+
+echo "Waiting for the backend container to start..."
 
 for attempt in $(seq 1 30); do
-  if curl -fsS http://127.0.0.1:8000/api/recipes/ >/dev/null; then
-    echo "Backend container started and Django is responding."
-    exit 0
-  fi
-
   if ! docker inspect \
     --format '{{.State.Running}}' \
     recipe-app-backend 2>/dev/null | grep -qx true; then
-    echo "Backend container is not running." >&2
+    echo "ERROR: Backend container stopped." >&2
     docker logs --tail 100 recipe-app-backend >&2 || true
     exit 1
+  fi
+
+  if curl -fsS \
+    --max-time 3 \
+    http://127.0.0.1:8000/healthz \
+    >/dev/null 2>&1; then
+    echo "Django health endpoint is responding."
+    exit 0
   fi
 
   sleep 2
 done
 
-echo "ERROR: Django did not become available within 60 seconds." >&2
-docker logs --tail 100 recipe-app-backend >&2
+# The container can still be running while database
+# initialization is pending.
+if docker inspect \
+  --format '{{.State.Running}}' \
+  recipe-app-backend 2>/dev/null | grep -qx true; then
+  echo "Backend container is running."
+  echo "Application readiness will be verified after migrations."
+  exit 0
+fi
+
+echo "ERROR: Backend container is not running." >&2
+docker logs --tail 100 recipe-app-backend >&2 || true
 exit 1

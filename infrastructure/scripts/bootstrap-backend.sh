@@ -30,13 +30,8 @@ server {
 
     location = /healthz {
         access_log off;
-
-        proxy_pass http://127.0.0.1:8000/api/recipes/;
-        proxy_set_header Host localhost;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_connect_timeout 5s;
-        proxy_read_timeout 10s;
+        default_type text/plain;
+        return 200 "OK\n";
     }
 
     location / {

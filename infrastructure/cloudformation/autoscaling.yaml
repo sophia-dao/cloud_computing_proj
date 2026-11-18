@@ -15,6 +15,14 @@ Parameters:
     Default: t3.micro
     Description: EC2 instance type for backend application servers
 
+  InitialDeployment:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+    Description: Launch one backend instance during initial database setup
+
 Resources:
   BackendLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
@@ -71,20 +79,22 @@ Resources:
         LaunchTemplateId: !Ref BackendLaunchTemplate
         Version: !GetAtt BackendLaunchTemplate.LatestVersionNumber
 
-      MinSize: "2"
+      MinSize: !If [IsInitialDeployment, "1", "2"]
       MaxSize: "3"
-      DesiredCapacity: "2"
+      DesiredCapacity: !If [IsInitialDeployment, "1", "2"]
 
       TargetGroupARNs:
         - !ImportValue RecipeApp-BackendTargetGroupArn
 
       HealthCheckType: ELB
-      HealthCheckGracePeriod: 300
+      HealthCheckGracePeriod: !If [IsInitialDeployment, 1800, 300]
 
       Tags:
         - Key: Name
           Value: recipe-app-private-asg-backend
           PropagateAtLaunch: true
+Conditions:
+  IsInitialDeployment: !Equals [!Ref InitialDeployment, "true"]
 
 Outputs:
   AutoScalingGroupName:
