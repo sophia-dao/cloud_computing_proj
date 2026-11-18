@@ -10,6 +10,9 @@ Resources:
 
   RecipeAppVPC:
     Type: AWS::EC2::VPC
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Provide an isolated network for the Recipe Suggestion App
     Properties:
       CidrBlock: 10.0.0.0/16
       EnableDnsSupport: true
@@ -26,6 +29,9 @@ Resources:
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Provide internet connectivity for the public subnet
     Properties:
       Tags:
         - Key: Name
@@ -33,6 +39,9 @@ Resources:
 
   InternetGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Attach the internet gateway to the application VPC
     Properties:
       VpcId: !Ref RecipeAppVPC
       InternetGatewayId: !Ref InternetGateway
@@ -41,14 +50,17 @@ Resources:
   # Public Subnets
   # ============================================================
 
-  # Public subnet for EC2 (us-east-1a)
+  # Public subnet for the NAT Gateway (first available AZ)
   PublicSubnetA:
     Type: AWS::EC2::Subnet
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Host the NAT Gateway in a public subnet
     Properties:
       VpcId: !Ref RecipeAppVPC
       CidrBlock: 10.0.2.0/24
-      AvailabilityZone: us-east-1a
-      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
           Value: recipe-app-public-subnet-a
@@ -59,6 +71,9 @@ Resources:
 
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Route public subnet internet trffic through the internet gateway
     Properties:
       VpcId: !Ref RecipeAppVPC
       Tags:
@@ -68,6 +83,9 @@ Resources:
   # Default route to the Internet Gateway
   PublicDefaultRoute:
     Type: AWS::EC2::Route
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Provide the public internet with a default iternet route
     DependsOn: InternetGatewayAttachment
     Properties:
       RouteTableId: !Ref PublicRouteTable
@@ -80,6 +98,9 @@ Resources:
 
   NatGatewayElasticIP:
     Type: AWS::EC2::EIP
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Provide a stable public IP address for outbund NAT traffic
     Properties:
       Domain: vpc
       Tags:
@@ -88,6 +109,9 @@ Resources:
 
   ApplicationNatGateway:
     Type: AWS::EC2::NatGateway
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Provide outbound internet access for private application instances
     DependsOn:
       - InternetGatewayAttachment
       - PublicDefaultRoute
@@ -101,6 +125,9 @@ Resources:
 
   PrivateApplicationDefaultRouteA:
     Type: AWS::EC2::Route
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Route private application subnet A outbound traffic through NAT
     Properties:
       RouteTableId: !Ref PrivateApplicationRouteTableA
       DestinationCidrBlock: 0.0.0.0/0
@@ -108,6 +135,9 @@ Resources:
 
   PrivateApplicationDefaultRouteB:
     Type: AWS::EC2::Route
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Route private application subnet B outbound traffic through NAT
     Properties:
       RouteTableId: !Ref PrivateApplicationRouteTableB
       DestinationCidrBlock: 0.0.0.0/0
@@ -119,10 +149,13 @@ Resources:
 
   PrivateApplicationSubnetA:
     Type: AWS::EC2::Subnet
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Host private backend instances in the first availability zone
     Properties:
       VpcId: !Ref RecipeAppVPC
       CidrBlock: 10.0.5.0/24
-      AvailabilityZone: us-east-1a
+      AvailabilityZone: !Select [0, !GetAZs ""]
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
@@ -132,10 +165,13 @@ Resources:
 
   PrivateApplicationSubnetB:
     Type: AWS::EC2::Subnet
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Host private backend instances in the second availability zone
     Properties:
       VpcId: !Ref RecipeAppVPC
       CidrBlock: 10.0.6.0/24
-      AvailabilityZone: us-east-1b
+      AvailabilityZone: !Select [1, !GetAZs ""]
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
@@ -148,6 +184,9 @@ Resources:
   # Database subnets remain isolated without an internet default route.
   PrivateApplicationRouteTableA:
     Type: AWS::EC2::RouteTable
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Control routing for private application subnet A
     Properties:
       VpcId: !Ref RecipeAppVPC
       Tags:
@@ -156,6 +195,9 @@ Resources:
 
   PrivateApplicationRouteTableB:
     Type: AWS::EC2::RouteTable
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Control routing for private application subnet B
     Properties:
       VpcId: !Ref RecipeAppVPC
       Tags:
@@ -164,12 +206,18 @@ Resources:
 
   PrivateApplicationSubnetARouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Associate application subnet A with its private route table
     Properties:
       SubnetId: !Ref PrivateApplicationSubnetA
       RouteTableId: !Ref PrivateApplicationRouteTableA
 
   PrivateApplicationSubnetBRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Associate application subnet B with its private route table
     Properties:
       SubnetId: !Ref PrivateApplicationSubnetB
       RouteTableId: !Ref PrivateApplicationRouteTableB
@@ -180,10 +228,13 @@ Resources:
 
   PrivateDatabaseSubnetA:
     Type: AWS::EC2::Subnet
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Host private database resources in the first availability zone
     Properties:
       VpcId: !Ref RecipeAppVPC
       CidrBlock: 10.0.3.0/24
-      AvailabilityZone: us-east-1a
+      AvailabilityZone: !Select [0, !GetAZs ""]
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
@@ -191,10 +242,13 @@ Resources:
 
   PrivateDatabaseSubnetB:
     Type: AWS::EC2::Subnet
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Host private database resources in the second availability zone
     Properties:
       VpcId: !Ref RecipeAppVPC
       CidrBlock: 10.0.4.0/24
-      AvailabilityZone: us-east-1b
+      AvailabilityZone: !Select [1, !GetAZs ""]
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
@@ -206,6 +260,9 @@ Resources:
 
   PrivateDatabaseRouteTable:
     Type: AWS::EC2::RouteTable
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Keep database subnets isolated from direct internet routing
     Properties:
       VpcId: !Ref RecipeAppVPC
       Tags:
@@ -214,12 +271,18 @@ Resources:
 
   PrivateDatabaseSubnetARouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Associate database subnet A with its isolated route table
     Properties:
       SubnetId: !Ref PrivateDatabaseSubnetA
       RouteTableId: !Ref PrivateDatabaseRouteTable
 
   PrivateDatabaseSubnetBRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Associate database subnet B with its isolated route table
     Properties:
       SubnetId: !Ref PrivateDatabaseSubnetB
       RouteTableId: !Ref PrivateDatabaseRouteTable
@@ -231,6 +294,9 @@ Resources:
   # Associate public subnet with public route table
   PublicSubnetARouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
+    Metadata:
+      com.aws.cloudformation.Context:
+          why: Associate database NAT Gateway subnet with its public route table
     Properties:
       SubnetId: !Ref PublicSubnetA
       RouteTableId: !Ref PublicRouteTable

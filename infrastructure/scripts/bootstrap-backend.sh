@@ -3,12 +3,14 @@ set -euo pipefail
 
 echo "[Bootstrap] Starting Recipe App backend setup..."
 
+# Install required packages on Amazon Linux 2023
+dnf install -y docker nginx python3
+
 # Ensure application directory exists
 mkdir -p /opt/recipe-app
 
-# Enable required services
+# Enable Docker
 systemctl enable --now docker
-systemctl enable --now nginx
 
 # Install the startup script
 # This placeholder will be replaced during CloudFormation packaging.
@@ -18,42 +20,36 @@ START_SCRIPT
 
 chmod 700 /opt/recipe-app/start-backend.sh
 
-# Configure application-aware health check.
-# ALB health checks use the target IP as the Host header.
-# Proxy to Django with a trusted Host value.
+# Configure Nginx as the reverse proxy for Django/Gunicorn.
+# ALB forwards HTTP requests to Nginx on port 80.
 
-python3 - <<'PY'
-from pathlib import Path
+cat > /etc/nginx/conf.d/recipe-app.conf <<'NGINX'
+server {
+    listen 80;
+    server_name _;
 
-path = Path("/etc/nginx/conf.d/recipe-app.conf")
-config = path.read_text()
-
-old = '''location = /healthz {
+    location = /healthz {
+        access_log off;
         default_type text/plain;
-        access_log off;
-        return 200 "ok\\n";
-    }'''
+        return 200 "OK\n";
+    }
 
-new = '''location = /healthz {
-        access_log off;
-
-        proxy_pass http://127.0.0.1:8000/api/recipes/;
-        proxy_set_header Host localhost;
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
         proxy_connect_timeout 5s;
-        proxy_read_timeout 10s;
-    }'''
+        proxy_read_timeout 60s;
+    }
+}
+NGINX
 
-if config.count(old) != 1:
-    raise SystemExit("Expected original Nginx health-check block not found")
-
-path.write_text(config.replace(old, new))
-print("[Bootstrap] Application health check configured")
-PY
-
+# Validate Nginx configuration and start the service
 nginx -t
-systemctl reload nginx
+systemctl enable --now nginx
 
 # Register systemd service
 cat > /etc/systemd/system/recipe-app-backend.service <<'SERVICE'
@@ -67,8 +63,9 @@ Requires=docker.service
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/opt/recipe-app/start-backend.sh
-ExecStop=/usr/bin/docker stop recipe-app-backend
-TimeoutStartSec=300
+ExecStop=-/usr/bin/docker stop recipe-app-backend
+ExecStopPost=-/usr/bin/docker rm -f recipe-app-backend
+TimeoutStartSec=600
 TimeoutStopSec=60
 Restart=no
 

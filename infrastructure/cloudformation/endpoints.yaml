@@ -1,121 +1,134 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Recipe Suggestion App - private AWS service access via VPC endpoints
-
-Parameters:
-  VpcId:
-    Type: AWS::EC2::VPC::Id
-    Default: vpc-0197766fbe7061905
-    Description: Existing Recipe App VPC
-  ApplicationSubnetAId:
-    Type: AWS::EC2::Subnet::Id
-    Default: subnet-0cdb39949b89716ec
-  ApplicationSubnetBId:
-    Type: AWS::EC2::Subnet::Id
-    Default: subnet-01579ed4906000b1d
-  ApplicationRouteTableAId:
-    Type: String
-    Default: rtb-0676dffe617be86ca
-  ApplicationRouteTableBId:
-    Type: String
-    Default: rtb-0c6b007fe66f090b4
+Metadata:
+  com.aws.cloudformation.Context:
+    arch: Private connectivity to AWS services through VPC interface and gateway endpoints.
 
 Resources:
   EndpointSecurityGroup:
     Type: AWS::EC2::SecurityGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Controls HTTPS access from the Recipe App VPC to private AWS service endpoints.
+        must:
+          - Permit HTTPS on port 443 from backend instances.
     Properties:
-      GroupDescription: Allow HTTPS to VPC endpoints from private application subnets
-      VpcId: !Ref VpcId
+      GroupDescription: Allow HTTPS to VPC endpoints from Recipe App VPC
+      VpcId: !ImportValue RecipeApp-VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
-          CidrIp: 10.0.5.0/24
-          Description: Private application subnet A
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 10.0.6.0/24
-          Description: Private application subnet B
+          CidrIp: 10.0.0.0/16
+          Description: Allow HTTPS from Recipe App VPC
       Tags:
         - Key: Name
           Value: recipe-app-vpc-endpoints
 
   EcrApiEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Provides private access to the Amazon ECR API for container image authentication and metadata retrieval.
     Properties:
-      VpcId: !Ref VpcId
+      VpcId: !ImportValue RecipeApp-VpcId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.api
       VpcEndpointType: Interface
       PrivateDnsEnabled: true
-      SubnetIds: [!Ref ApplicationSubnetAId, !Ref ApplicationSubnetBId]
+      SubnetIds: [!ImportValue RecipeApp-PrivateApplicationSubnetAId, !ImportValue RecipeApp-PrivateApplicationSubnetBId]
       SecurityGroupIds: [!Ref EndpointSecurityGroup]
 
   EcrDockerEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Provides private access to the Amazon ECR Docker registry for backend container image pulls.
     Properties:
-      VpcId: !Ref VpcId
+      VpcId: !ImportValue RecipeApp-VpcId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.ecr.dkr
       VpcEndpointType: Interface
       PrivateDnsEnabled: true
-      SubnetIds: [!Ref ApplicationSubnetAId, !Ref ApplicationSubnetBId]
+      SubnetIds: [!ImportValue RecipeApp-PrivateApplicationSubnetAId, !ImportValue RecipeApp-PrivateApplicationSubnetBId]
       SecurityGroupIds: [!Ref EndpointSecurityGroup]
 
   S3GatewayEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Enables private application subnets to access Amazon S3 through a gateway endpoint without traversing the NAT gateway.
+        must:
+          - Associate with both private application route tables.
     Properties:
-      VpcId: !Ref VpcId
+      VpcId: !ImportValue RecipeApp-VpcId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
       VpcEndpointType: Gateway
-      RouteTableIds: [!Ref ApplicationRouteTableAId, !Ref ApplicationRouteTableBId]
+      RouteTableIds:
+        - !ImportValue RecipeApp-PrivateApplicationRouteTableAId
+        - !ImportValue RecipeApp-PrivateApplicationRouteTableBId
 
   SecretsManagerEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Enables backend EC2 instances to retrieve application and database secrets privately from AWS Secrets Manager.
     Properties:
-      VpcId: !Ref VpcId
+      VpcId: !ImportValue RecipeApp-VpcId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
       VpcEndpointType: Interface
       PrivateDnsEnabled: true
-      SubnetIds: [!Ref ApplicationSubnetAId, !Ref ApplicationSubnetBId]
+      SubnetIds: [!ImportValue RecipeApp-PrivateApplicationSubnetAId, !ImportValue RecipeApp-PrivateApplicationSubnetBId]
       SecurityGroupIds: [!Ref EndpointSecurityGroup]
 
   SsmEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Provides private connectivity between EC2 instances and AWS Systems Manager for instance management.
     Properties:
-      VpcId: !Ref VpcId
+      VpcId: !ImportValue RecipeApp-VpcId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
       VpcEndpointType: Interface
       PrivateDnsEnabled: true
-      SubnetIds: [!Ref ApplicationSubnetAId, !Ref ApplicationSubnetBId]
+      SubnetIds: [!ImportValue RecipeApp-PrivateApplicationSubnetAId, !ImportValue RecipeApp-PrivateApplicationSubnetBId]
       SecurityGroupIds: [!Ref EndpointSecurityGroup]
 
   SsmMessagesEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Supports secure Session Manager communication with backend EC2 instances through private networking.
     Properties:
-      VpcId: !Ref VpcId
+      VpcId: !ImportValue RecipeApp-VpcId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
       VpcEndpointType: Interface
       PrivateDnsEnabled: true
-      SubnetIds: [!Ref ApplicationSubnetAId, !Ref ApplicationSubnetBId]
+      SubnetIds: [!ImportValue RecipeApp-PrivateApplicationSubnetAId, !ImportValue RecipeApp-PrivateApplicationSubnetBId]
       SecurityGroupIds: [!Ref EndpointSecurityGroup]
 
   Ec2MessagesEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Provides an additional Systems Manager messaging endpoint for compatible EC2 management operations.
     Properties:
-      VpcId: !Ref VpcId
+      VpcId: !ImportValue RecipeApp-VpcId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
       VpcEndpointType: Interface
       PrivateDnsEnabled: true
-      SubnetIds: [!Ref ApplicationSubnetAId, !Ref ApplicationSubnetBId]
+      SubnetIds: [!ImportValue RecipeApp-PrivateApplicationSubnetAId, !ImportValue RecipeApp-PrivateApplicationSubnetBId]
       SecurityGroupIds: [!Ref EndpointSecurityGroup]
 
   CloudWatchLogsEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Provides private access to Amazon CloudWatch Logs for application and instance log delivery.
     Properties:
-      VpcId: !Ref VpcId
+      VpcId: !ImportValue RecipeApp-VpcId
       ServiceName: !Sub com.amazonaws.${AWS::Region}.logs
       VpcEndpointType: Interface
       PrivateDnsEnabled: true
-      SubnetIds: [!Ref ApplicationSubnetAId, !Ref ApplicationSubnetBId]
+      SubnetIds: [!ImportValue RecipeApp-PrivateApplicationSubnetAId, !ImportValue RecipeApp-PrivateApplicationSubnetBId]
       SecurityGroupIds: [!Ref EndpointSecurityGroup]
 
 Outputs:

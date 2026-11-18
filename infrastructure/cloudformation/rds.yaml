@@ -1,11 +1,11 @@
 
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Recipe Suggestion App - Amazon RDS PostgreSQL
+Metadata:
+  com.aws.cloudformation.Context:
+    arch: Private PostgreSQL database with encrypted storage and credentials managed by AWS Secrets Manager.
 
 Parameters:
-  BackendSecurityGroupId:
-    Type: AWS::EC2::SecurityGroup::Id
-    Description: Security group attached to the Django EC2 backend
 
   DBInstanceClass:
     Type: String
@@ -28,6 +28,11 @@ Resources:
 
   DatabaseSecurityGroup:
     Type: AWS::EC2::SecurityGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Restricts PostgreSQL connections to backend EC2 instances.
+        must:
+          - Allow PostgreSQL port 5432 from the backend security group.
     Properties:
       GroupDescription: Allow PostgreSQL access from Django backend
       VpcId:
@@ -36,7 +41,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 5432
           ToPort: 5432
-          SourceSecurityGroupId: !Ref BackendSecurityGroupId
+          SourceSecurityGroupId: !ImportValue RecipeApp-BackendSecurityGroupId
       Tags:
         - Key: Name
           Value: recipe-app-rds-sg
@@ -47,6 +52,11 @@ Resources:
 
   DatabaseSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Places the RDS instance within private database subnets across two Availability Zones.
+        must:
+          - Include private database subnets in two Availability Zones.
     Properties:
       DBSubnetGroupDescription: Private subnets for Recipe App RDS
       SubnetIds:
@@ -62,10 +72,17 @@ Resources:
 
   PostgreSQLDatabase:
     Type: AWS::RDS::DBInstance
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Stores recipe application data in a private PostgreSQL database with AWS-managed credentials.
+        must:
+          - Remain inaccessible from the public internet.
+          - Use the database subnet group.
+          - Manage the master password through Secrets Manager.
     DeletionPolicy: Snapshot
     UpdateReplacePolicy: Snapshot
     Properties:
-      DBInstanceIdentifier: recipe-app-postgres
+      DBInstanceIdentifier: !Sub "${AWS::StackName}-postgres"
       Engine: postgres
       DBInstanceClass: !Ref DBInstanceClass
       AllocatedStorage: 20
@@ -116,3 +133,9 @@ Outputs:
     Value: !Ref DatabaseSecurityGroup
     Export:
       Name: RecipeApp-DatabaseSecurityGroupId
+
+  DatabaseName:
+    Description: PostgreSQL database name
+    Value: !Ref DBName
+    Export:
+      Name: RecipeApp-DatabaseName

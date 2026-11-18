@@ -1,34 +1,33 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Recipe Suggestion App - Internal Application Load Balancer for private backend instances
+Metadata:
+  com.aws.cloudformation.Context:
+    arch: Private application load balancer connecting CloudFront VPC origin to Django EC2 instances.
 
 Parameters:
-  VpcId:
-    Type: AWS::EC2::VPC::Id
-    Default: vpc-0197766fbe7061905
-    Description: Existing Recipe App VPC
-  ApplicationSubnetAId:
-    Type: AWS::EC2::Subnet::Id
-    Default: subnet-0cdb39949b89716ec
-  ApplicationSubnetBId:
-    Type: AWS::EC2::Subnet::Id
-    Default: subnet-01579ed4906000b1d
   VpcCidr:
     Type: String
     Default: 10.0.0.0/16
-    Description: VPC CIDR used for internal ALB outbound traffic to private backend targets
+    Description: CIDR of the Recipe App VPC
 
 Resources:
   InternalAlbSecurityGroup:
     Type: AWS::EC2::SecurityGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Controls HTTP access to the internal Application Load Balancer and its backend targets.
+        must:
+          - Allow HTTP traffic on port 80 to the internal ALB.
+          - Allow HTTP traffic from the ALB to backend EC2 targets.
     Properties:
       GroupDescription: Internal ALB HTTP ingress from within Recipe App VPC
-      VpcId: !Ref VpcId
+      VpcId: !ImportValue RecipeApp-VpcId
       SecurityGroupIngress:
-      - IpProtocol: tcp
-        FromPort: 80
-        ToPort: 80
-        SourceSecurityGroupId: sg-0ccc6ae7953ecfc8d
-        Description: Allow CloudFront VPC origin access
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref VpcCidr
+          Description: Allow internal VPC HTTP traffic
       SecurityGroupEgress:
         - IpProtocol: tcp
           FromPort: 80
@@ -41,28 +40,42 @@ Resources:
 
   InternalApplicationLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Provides a private HTTP entry point for CloudFront VPC origin requests and distributes traffic across backend EC2 instances.
+        must:
+          - Remain internal rather than internet-facing.
+          - Use private application subnets across two Availability Zones.
     Properties:
       Name: recipe-app-internal-alb
       Type: application
       Scheme: internal
       IpAddressType: ipv4
       Subnets:
-        - !Ref ApplicationSubnetAId
-        - !Ref ApplicationSubnetBId
+        - !ImportValue RecipeApp-PrivateApplicationSubnetAId
+        - !ImportValue RecipeApp-PrivateApplicationSubnetBId
       SecurityGroups:
         - !Ref InternalAlbSecurityGroup
       LoadBalancerAttributes:
         - Key: deletion_protection.enabled
           Value: 'false'
+        - Key: routing.http.drop_invalid_header_fields.enabled
+          Value: 'true'
       Tags:
         - Key: Name
           Value: recipe-app-internal-alb
 
   BackendTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Registers private backend EC2 instances as HTTP targets and monitors application health.
+        must:
+          - Forward HTTP traffic to backend instances on port 80.
+          - Use /healthz for application health checks.
     Properties:
       Name: recipe-app-private-backend
-      VpcId: !Ref VpcId
+      VpcId: !ImportValue RecipeApp-VpcId
       Protocol: HTTP
       Port: 80
       TargetType: instance
@@ -82,6 +95,12 @@ Resources:
 
   InternalHttpListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Receives HTTP requests from the CloudFront VPC origin through the internal ALB and forwards them to the backend target group.
+        must:
+          - Listen on HTTP port 80.
+          - Forward requests to BackendTargetGroup.
     Properties:
       LoadBalancerArn: !Ref InternalApplicationLoadBalancer
       Port: 80

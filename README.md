@@ -1,4 +1,7 @@
 # Recipe Suggestion App
+> 📋 **Deployment Instructions:** [View deployment steps](infrastructure/README.md)
+
+> ❗ **MAIN LIMITATION:** The initial database contains a limited variety of recipes. As a result, applying multiple filters simultaneously may return few or no matching recipes, making some filter combinations difficult to test.
 
 > 📄 **Final Project Documentation:** [View Full Report](docs/Final%20zdocumentation.pdf)
 

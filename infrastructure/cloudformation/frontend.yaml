@@ -1,6 +1,9 @@
 
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Recipe App React frontend hosting and Django API routing
+Metadata:
+  com.aws.cloudformation.Context:
+    arch: CloudFront distribution serving a private React S3 frontend, Django API through a VPC origin, and private recipe images through S3.
 
 Resources:
 
@@ -10,6 +13,9 @@ Resources:
 
   FrontendBucket:
     Type: AWS::S3::Bucket
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Stores the React production build privately in S3.
     Properties:
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
@@ -20,6 +26,8 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
 
   # ============================================================
   # CloudFront Origin Access Control
@@ -27,6 +35,9 @@ Resources:
 
   FrontendOAC:
     Type: AWS::CloudFront::OriginAccessControl
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Allows CloudFront to securely access private S3 origins using signed requests.
     Properties:
       OriginAccessControlConfig:
         Name: !Sub "${AWS::StackName}-oac"
@@ -37,9 +48,23 @@ Resources:
   # ============================================================
   # CloudFront Distribution
   # ============================================================
+  FrontendVpcOrigin:
+    Type: AWS::CloudFront::VpcOrigin
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Connects CloudFront privately to the internal application load balancer.
+    Properties:
+      VpcOriginEndpointConfig:
+        Name: !Sub "${AWS::StackName}-backend-vpc-origin"
+        Arn: !ImportValue RecipeApp-InternalAlbArn
+        HTTPPort: 80
+        OriginProtocolPolicy: http-only
 
   FrontendDistribution:
     Type: AWS::CloudFront::Distribution
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Provides the public HTTPS entry point and routes frontend, API, and media requests to their respective origins.
     Properties:
       DistributionConfig:
         Enabled: true
@@ -57,9 +82,9 @@ Resources:
 
           # Private Django backend through CloudFront VPC origin
           - Id: PrivateDjangoAPIOrigin
-            DomainName: internal-recipe-app-internal-alb-1524514520.us-east-1.elb.amazonaws.com
+            DomainName: !ImportValue RecipeApp-InternalAlbDnsName
             VpcOriginConfig:
-              VpcOriginId: vo_BE0O5HrJG2dFwrTMTCiYRQ
+              VpcOriginId: !GetAtt FrontendVpcOrigin.Id
               OriginReadTimeout: 30
               OriginKeepaliveTimeout: 5
             ConnectionAttempts: 3
@@ -69,7 +94,7 @@ Resources:
           - Id: MediaS3Origin
             DomainName: !Sub
               - "${BucketName}.s3.${AWS::Region}.amazonaws.com"
-              - BucketName: !ImportValue recipe-app-media-BucketName
+              - BucketName: !ImportValue RecipeApp-MediaBucketName
             OriginAccessControlId: !GetAtt FrontendOAC.Id
             S3OriginConfig:
               OriginAccessIdentity: ""
@@ -145,11 +170,25 @@ Resources:
 
   FrontendBucketPolicy:
     Type: AWS::S3::BucketPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Restricts frontend S3 object reads to the designated CloudFront distribution.
     Properties:
       Bucket: !Ref FrontendBucket
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt FrontendBucket.Arn
+              - !Sub "${FrontendBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
           - Sid: AllowCloudFrontRead
             Effect: Allow
             Principal:
@@ -168,6 +207,9 @@ Resources:
   
   FrontendSpaRewriteFunction:
     Type: AWS::CloudFront::Function
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Rewrites React client-side routes to index.html while preserving API and media requests.
     Properties:
       Name: !Sub '${AWS::StackName}-spa-rewrite'
       AutoPublish: true
@@ -179,8 +221,11 @@ Resources:
           var request = event.request;
           var uri = request.uri;
 
-          // Leave API requests unchanged.
-          if (uri === '/api' || uri.indexOf('/api/') === 0) {
+          // Leave API and media requests unchanged.
+          if (
+            uri === '/api' || uri.indexOf('/api/') === 0 ||
+            uri === '/media' || uri.indexOf('/media/') === 0
+          ) {
             return request;
           }
 
@@ -199,13 +244,22 @@ Resources:
 
 Outputs:
 
-  FrontendBucketName:
-    Value: !Ref FrontendBucket
-
   CloudFrontDistributionId:
     Value: !Ref FrontendDistribution
     Export:
-      Name: !Sub "${AWS::StackName}-DistributionId"
+      Name: RecipeApp-CloudFrontDistributionId
 
   FrontendURL:
     Value: !Sub "https://${FrontendDistribution.DomainName}"
+    Export:
+      Name: RecipeApp-FrontendURL
+
+  CloudFrontDomainName:
+    Value: !GetAtt FrontendDistribution.DomainName
+    Export:
+      Name: RecipeApp-CloudFrontDomainName
+
+  FrontendBucketName:
+    Value: !Ref FrontendBucket
+    Export:
+      Name: RecipeApp-FrontendBucketName

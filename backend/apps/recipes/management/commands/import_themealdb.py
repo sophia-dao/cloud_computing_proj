@@ -9,12 +9,64 @@ import requests
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.db.models import Q
 
 from apps.ingredients.models import Ingredient
 from apps.recipes.models import Recipe, RecipeIngredient, Tag
+from apps.users.models import Allergen
 
 
 API_URL = "https://www.themealdb.com/api/json/v1/1/search.php"
+LOOKUP_URL = "https://www.themealdb.com/api/json/v1/1/lookup.php"
+MEAL_ID_PATTERN = re.compile(r"Meal ID:\s*(\d+)")
+
+# Confirmed or strongly identifiable mappings from
+# the current ingredient names.
+# Product-dependent ingredients require separate review.
+
+INGREDIENT_ALLERGEN_MAP = {
+    "almonds": ["Tree Nuts"],
+    "flaked almonds": ["Tree Nuts"],
+    "ground almonds": ["Tree Nuts"],
+
+    "butter": ["Milk"],
+    "melted butter": ["Milk"],
+    "salted butter": ["Milk"],
+    "unsalted butter": ["Milk"],
+    "milk": ["Milk"],
+    "mozzarella": ["Milk"],
+    "dulce de leche": ["Milk"],
+    "queso fresco": ["Milk"],
+    "ice cream": ["Milk"],
+
+    "egg": ["Egg"],
+    "eggs": ["Egg"],
+    "egg yolks": ["Egg"],
+    "free-range eggs, beaten": ["Egg"],
+
+    "peanut butter": ["Peanut"],
+
+    "semolina": ["Wheat"],
+    "all purpose flour": ["Wheat"],
+    "plain flour": ["Wheat"],
+    "self-raising flour": ["Wheat"],
+
+    "soy sauce": ["Soy"],
+
+    "fish fillet": ["Fish"],
+    "fish sauce": ["Fish"],
+
+    "raw tiger prawns": ["Crustacean Shellfish"],
+}
+
+def detect_allergens(name):
+    return INGREDIENT_ALLERGEN_MAP.get(
+        name.strip().casefold(),
+        [],
+    )
+
+
+
 
 
 def parse_measurement(raw):
@@ -298,6 +350,13 @@ class Command(BaseCommand):
         finally:
             session.close()
 
+        # Repair missing images from earlier imports, including reruns.
+        if not options["skip_images"]:
+            self.backfill_images()
+
+        # Apply known allergen associations to imported ingredients.
+        self.map_allergens()
+
         self.stdout.write(
             self.style.SUCCESS(
                 f"Finished: {created} imported, "
@@ -330,3 +389,64 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Failed fetching letter {letter}: {exc}"
             ) from exc
+
+    def backfill_images(self):
+        recipes = Recipe.objects.filter(
+            Q(image__isnull=True) | Q(image=""),
+            description__contains="Imported from TheMealDB",
+        ).order_by("id")
+        updated = 0
+        skipped = 0
+        with requests.Session() as session:
+            for recipe in recipes.iterator():
+                match = MEAL_ID_PATTERN.search(recipe.description or "")
+                if not match:
+                    skipped += 1
+                    continue
+                meal_id = match.group(1)
+                try:
+                    response = session.get(LOOKUP_URL, params={"i": meal_id}, timeout=20)
+                    response.raise_for_status()
+                    meals = response.json().get("meals") or []
+                    if not meals:
+                        skipped += 1
+                        continue
+                    image_url = meals[0].get("strMealThumb")
+                    if not image_url or not image_url.startswith("https://www.themealdb.com/"):
+                        skipped += 1
+                        continue
+                    image_response = session.get(image_url, timeout=20)
+                    image_response.raise_for_status()
+                    if len(image_response.content) > 5_000_000:
+                        raise ValueError("Image exceeds 5 MB")
+                    recipe.image.save(
+                        f"themealdb_{meal_id}.jpg",
+                        ContentFile(image_response.content),
+                        save=True,
+                    )
+                    updated += 1
+                except (requests.RequestException, ValueError) as exc:
+                    skipped += 1
+                    self.stderr.write(f"Image skipped for {recipe.name}: {exc}")
+        self.stdout.write(f"Image backfill: {updated} updated, {skipped} skipped.")
+
+    def map_allergens(self):
+        matched = 0
+        added = 0
+        unmatched = 0
+        with transaction.atomic():
+            for ingredient in Ingredient.objects.all().iterator():
+                detected = detect_allergens(ingredient.name)
+                if not detected:
+                    unmatched += 1
+                    continue
+                matched += 1
+                for name in detected:
+                    allergen, _ = Allergen.objects.get_or_create(name=name)
+                    if not ingredient.allergens.filter(pk=allergen.pk).exists():
+                        ingredient.allergens.add(allergen)
+                        added += 1
+        self.stdout.write(
+            f"Allergen mapping: {matched} ingredients matched, "
+            f"{added} relationships added, {unmatched} unmatched."
+        )

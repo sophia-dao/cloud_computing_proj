@@ -1,6 +1,9 @@
 
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Recipe Suggestion App - Django EC2 backend infrastructure
+Metadata:
+  com.aws.cloudformation.Context:
+    arch: Backend security group and EC2 IAM identity for the private Django application.
 
 Resources:
 
@@ -10,18 +13,23 @@ Resources:
 
   BackendSecurityGroup:
     Type: AWS::EC2::SecurityGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Restricts inbound HTTP access to Django backend instances.
+        must:
+          - Allow HTTP port 80 from the internal ALB security group.
     Properties:
       GroupDescription: Security group for Recipe App Django backend
       VpcId: !ImportValue RecipeApp-VpcId
 
-      # Allow HTTP only from CloudFront origin-facing addresses.
-      # Nginx additionally validates the private origin header.
+      # Allow backend HTTP traffic only from the internal ALB.
+      # CloudFront reaches the backend through its VPC origin and the ALB.
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
-          SourcePrefixListId: pl-3b927c52
-          Description: Allow HTTP from CloudFront origin-facing IPs
+          SourceSecurityGroupId: !ImportValue RecipeApp-InternalAlbSecurityGroupId
+          Description: Allow HTTP only from internal ALB
 
       SecurityGroupEgress:
         - IpProtocol: "-1"
@@ -38,6 +46,16 @@ Resources:
 
   BackendInstanceRole:
     Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Grants backend EC2 instances access to ECR images, application and database secrets, deployment configuration, and private S3 media.
+        must:
+          - Allow EC2 to assume the role.
+          - Allow ECR image pulls.
+          - Allow access to Django and database secrets.
+          - Allow read access to deployment configuration in Parameter Store.
+          - Allow access to application media in S3.
+          - Support Systems Manager connectivity.
     Properties:
       Description: IAM role for Recipe App EC2 backend
 
@@ -52,68 +70,84 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
 
-      Policies:
-        - PolicyName: BackendECRPull
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - ecr:GetAuthorizationToken
-                Resource: "*"
-
-              - Effect: Allow
-                Action:
-                  - ecr:BatchGetImage
-                  - ecr:GetDownloadUrlForLayer
-                Resource: !ImportValue RecipeApp-BackendRepositoryArn
-
-        - PolicyName: RecipeAppRDSSecretRead
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - secretsmanager:GetSecretValue
-                Resource:
-                  Fn::ImportValue: RecipeApp-DatabaseSecretArn
-        
-        - PolicyName: RecipeAppMediaS3Access
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Sid: AllowMediaObjectAccess
-                Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:PutObject
-                Resource:
-                  Fn::Sub:
-                    - "${BucketArn}/media/*"
-                    - BucketArn:
-                        Fn::ImportValue: recipe-app-media-BucketArn
-
-              - Sid: AllowMediaBucketListing
-                Effect: Allow
-                Action:
-                  - s3:ListBucket
-                Resource:
-                  Fn::ImportValue: recipe-app-media-BucketArn
-                Condition:
-                  StringLike:
-                    s3:prefix:
-                      - "media/*"
-
       Tags:
         - Key: Project
           Value: RecipeSuggestionApp
 
+  # ============================================================
+  # Backend IAM Managed Policy
+  # ============================================================
+
+  BackendApplicationPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Grants backend EC2 instances access to ECR, database credentials, and S3 recipe media.
+    Properties:
+      Description: Recipe App backend runtime permissions
+      Roles:
+        - !Ref BackendInstanceRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ECRAuthorization
+            Effect: Allow
+            Action:
+              - ecr:GetAuthorizationToken
+            Resource: "*"
+
+          - Sid: ECRImagePull
+            Effect: Allow
+            Action:
+              - ecr:BatchGetImage
+              - ecr:GetDownloadUrlForLayer
+            Resource: !ImportValue RecipeApp-BackendRepositoryArn
+
+          - Sid: DjangoSecretRead
+            Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !ImportValue RecipeApp-DjangoSecretArn
+
+          - Sid: DeploymentConfigurationRead
+            Effect: Allow
+            Action:
+              - ssm:GetParameter
+            Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/recipe-app/production/*"
+
+          - Sid: MediaObjectAccess
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+            Resource:
+              Fn::Sub:
+                - "${BucketArn}/media/*"
+                - BucketArn:
+                    Fn::ImportValue: RecipeApp-MediaBucketArn
+
+          - Sid: MediaBucketListing
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource:
+              Fn::ImportValue: RecipeApp-MediaBucketArn
+            Condition:
+              StringLike:
+                s3:prefix:
+                  - "media/*"
   # ============================================================
   # EC2 Instance Profile
   # ============================================================
 
   BackendInstanceProfile:
     Type: AWS::IAM::InstanceProfile
+    DependsOn: BackendApplicationPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Attaches the backend IAM role to EC2 instances through an instance profile.
+        must:
+          - Reference BackendInstanceRole.
     Properties:
       Roles:
         - !Ref BackendInstanceRole
@@ -126,7 +160,21 @@ Outputs:
   SecurityGroupId:
     Description: Backend security group ID
     Value: !Ref BackendSecurityGroup
+    Export:
+      Name: RecipeApp-BackendSecurityGroupId
 
   InstanceRoleArn:
     Description: IAM role ARN for backend EC2 instances
     Value: !GetAtt BackendInstanceRole.Arn
+  
+  BackendInstanceProfileName:
+    Description: Instance profile name for backend EC2 instances
+    Value: !Ref BackendInstanceProfile
+    Export:
+      Name: RecipeApp-BackendInstanceProfileName
+
+  BackendInstanceRoleName:
+    Description: IAM role name for backend EC2 instances
+    Value: !Ref BackendInstanceRole
+    Export:
+      Name: RecipeApp-BackendInstanceRoleName

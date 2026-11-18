@@ -101,6 +101,7 @@ auth-frontend.md
 # CloudFront configuration backups
 # May contain private origin headers/secrets
 infrastructure/backups/
+infrastructure/archive/
 
 # Local AWS credentials
 .aws/

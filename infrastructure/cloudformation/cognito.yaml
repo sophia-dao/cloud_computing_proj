@@ -1,6 +1,9 @@
 
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Cognito authentication for Recipe Suggestion App
+Metadata:
+  com.aws.cloudformation.Context:
+    arch: Cognito authentication with a public React SPA client, OAuth authorization code flow, and optional Google federation.
 
 Parameters:
   CognitoDomainPrefix:
@@ -8,13 +11,27 @@ Parameters:
     Description: Globally unique Cognito domain prefix
     AllowedPattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
 
-  CallbackURL:
+  EnableGoogleSignIn:
     Type: String
-    Description: React frontend OAuth callback URL
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+    Description: Enable Google Sign-In when OAuth credentials are configured
 
-  LogoutURL:
+  GoogleOAuthSecretArn:
     Type: String
-    Description: React frontend logout redirect URL
+    Default: ""
+    Description: ARN of an existing Secrets Manager secret containing client_id and client_secret
+
+Conditions:
+  UseGoogleSignIn: !Equals [!Ref EnableGoogleSignIn, "true"]
+Rules:
+  GoogleCredentialsRequired:
+    RuleCondition: !Equals [!Ref EnableGoogleSignIn, "true"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref GoogleOAuthSecretArn, ""]]
+        AssertDescription: GoogleOAuthSecretArn must be provided when Google Sign-In is enabled.
 
 Resources:
 
@@ -23,8 +40,13 @@ Resources:
   # ----------------------------------------
   RecipeUserPool:
     Type: AWS::Cognito::UserPool
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Manages registered users and authentication.
     Properties:
-      UserPoolName: recipe-app-users
+      UserPoolName: !Sub "${AWS::StackName}-users"
 
       UsernameAttributes:
         - email
@@ -48,14 +70,22 @@ Resources:
   # ----------------------------------------
   RecipeGoogleIdentityProvider:
     Type: AWS::Cognito::UserPoolIdentityProvider
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Enables optional Google federated authentication.
+    Condition: UseGoogleSignIn
     Properties:
       UserPoolId: !Ref RecipeUserPool
       ProviderName: Google
       ProviderType: Google
 
       ProviderDetails:
-        client_id: "{{resolve:secretsmanager:recipe-app/google-oauth:SecretString:client_id}}"
-        client_secret: "{{resolve:secretsmanager:recipe-app/google-oauth:SecretString:client_secret}}"
+        client_id: !Sub
+          - "{{resolve:secretsmanager:${SecretArn}:SecretString:client_id}}"
+          - SecretArn: !Ref GoogleOAuthSecretArn
+        client_secret: !Sub
+          - "{{resolve:secretsmanager:${SecretArn}:SecretString:client_secret}}"
+          - SecretArn: !Ref GoogleOAuthSecretArn
         authorize_scopes: "openid email profile"
 
       AttributeMapping:
@@ -67,18 +97,20 @@ Resources:
   # ----------------------------------------
   RecipeUserPoolClient:
     Type: AWS::Cognito::UserPoolClient
-    DependsOn:
-      - RecipeGoogleIdentityProvider
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Provides OAuth authentication for the React SPA without a client secret.
     Properties:
-      ClientName: recipe-app-frontend
+      ClientName: !Sub "${AWS::StackName}-frontend"
       UserPoolId: !Ref RecipeUserPool
 
       # Public SPA client: no client secret
       GenerateSecret: false
 
-      SupportedIdentityProviders:
-        - COGNITO
-        - Google
+      SupportedIdentityProviders: !If
+        - UseGoogleSignIn
+        - [COGNITO, Google]
+        - [COGNITO]
 
       AllowedOAuthFlowsUserPoolClient: true
 
@@ -91,10 +123,14 @@ Resources:
         - profile
 
       CallbackURLs:
-        - !Ref CallbackURL
+        - !Sub
+          - "https://${Domain}/auth/callback"
+          - Domain: !ImportValue RecipeApp-CloudFrontDomainName
 
       LogoutURLs:
-        - !Ref LogoutURL
+        - !Sub
+          - "https://${Domain}/"
+          - Domain: !ImportValue RecipeApp-CloudFrontDomainName
 
       ExplicitAuthFlows:
         - ALLOW_REFRESH_TOKEN_AUTH
@@ -107,28 +143,34 @@ Resources:
   # ----------------------------------------
   RecipeUserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Hosts the Cognito authentication endpoints.
     Properties:
       Domain: !Ref CognitoDomainPrefix
       UserPoolId: !Ref RecipeUserPool
 
 Outputs:
-
   UserPoolId:
     Description: Cognito User Pool ID
     Value: !Ref RecipeUserPool
+    Export:
+      Name: RecipeApp-CognitoUserPoolId
 
   UserPoolClientId:
     Description: React App Client ID
     Value: !Ref RecipeUserPoolClient
+    Export:
+      Name: RecipeApp-CognitoClientId
 
   CognitoDomain:
-    Description: Cognito managed login domain
-    Value: !Sub
-      - "https://${Prefix}.auth.${AWS::Region}.amazoncognito.com"
-      - Prefix: !Ref CognitoDomainPrefix
+    Description: Cognito authentication domain
+    Value: !Sub "https://${CognitoDomainPrefix}.auth.${AWS::Region}.amazoncognito.com"
+    Export:
+      Name: RecipeApp-CognitoDomain
 
   CognitoIssuer:
-    Description: JWT issuer URL
-    Value: !Sub
-      - "https://cognito-idp.${AWS::Region}.amazonaws.com/${PoolId}"
-      - PoolId: !Ref RecipeUserPool
+    Description: Cognito JWT issuer URL
+    Value: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${RecipeUserPool}"
+    Export:
+      Name: RecipeApp-CognitoIssuer
