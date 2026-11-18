@@ -10,9 +10,16 @@ bootstrap_path = ROOT / "scripts" / "bootstrap-backend.sh"
 template_path = ROOT / "cloudformation" / "autoscaling.yaml"
 output_path = ROOT / "cloudformation" / "autoscaling-packaged.yaml"
 
-startup = startup_path.read_text()
-bootstrap = bootstrap_path.read_text()
-template = template_path.read_text()
+startup = startup_path.read_text(encoding="utf-8")
+bootstrap = bootstrap_path.read_text(encoding="utf-8")
+bootstrap_size = len(bootstrap.encode("utf-8"))
+
+if bootstrap_size > 16 * 1024:
+    raise ValueError(
+        f"User Data exceeds EC2's 16 KiB raw limit: {bootstrap_size} bytes"
+    )
+
+template = template_path.read_text(encoding="utf-8")
 
 placeholder = "__START_BACKEND_SCRIPT__"
 
@@ -48,11 +55,8 @@ packaged = re.sub(
     count=1,
 )
 
-output_path.write_text(packaged)
+output_path.write_text(packaged, encoding="utf-8")
 
 print(f"Created: {output_path}")
-print(f"Bootstrap size: {len(bootstrap.encode())} bytes")
+print(f"Bootstrap size: {bootstrap_size} bytes")
 print(f"Encoded User Data size: {len(userdata)} characters")
-
-if len(bootstrap.encode()) > 16 * 1024:
-    raise ValueError("User Data exceeds the EC2 16 KiB raw limit")

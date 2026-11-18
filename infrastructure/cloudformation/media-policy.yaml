@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Grant CloudFront read access to private Recipe App media
+
+Metadata:
+  com.aws.cloudformation.Context:
+    arch: Restricts private recipe media access to the application CloudFront distribution.
+
+Resources:
+  MediaCloudFrontReadPolicy:
+    Type: AWS::S3::BucketPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Grants the application CloudFront distribution permission to retrieve private recipe images.
+    Properties:
+      Bucket: !ImportValue RecipeApp-MediaBucketName
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !ImportValue RecipeApp-MediaBucketArn
+              - !Sub
+                  - "${BucketArn}/*"
+                  - BucketArn: !ImportValue RecipeApp-MediaBucketArn
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+          - Sid: AllowCloudFrontRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub
+              - "${BucketArn}/*"
+              - BucketArn: !ImportValue RecipeApp-MediaBucketArn
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub
+                  - "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${DistributionId}"
+                  - DistributionId: !ImportValue RecipeApp-CloudFrontDistributionId

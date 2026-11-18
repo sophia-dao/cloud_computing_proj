@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Runtime configuration for Recipe App backend
+
+Metadata:
+  com.aws.cloudformation.Context:
+    arch: Publishes deployment-specific resource identifiers to Systems Manager Parameter Store for EC2 backend instances.
+
+Parameters:
+  ECRImageTag:
+    Type: String
+    Default: final-v1
+    Description: Docker image tag to deploy
+
+Resources:
+  ECRRepositoryParameter:
+    Type: AWS::SSM::Parameter
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Stores the ECR repository name used to pull the Django backend Docker image.
+    Properties:
+      Name: /recipe-app/production/ecr-repository
+      Type: String
+      Value: recipe-app-backend
+
+  ECRImageTagParameter:
+    Type: AWS::SSM::Parameter
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Stores the Docker image tag used by backend EC2 instances.
+    Properties:
+      Name: /recipe-app/production/ecr-image-tag
+      Type: String
+      Value: !Ref ECRImageTag
+
+  DjangoSecretArnParameter:
+    Type: AWS::SSM::Parameter
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Stores the ARN of the Secrets Manager secret containing the Django application secret key.
+    Properties:
+      Name: /recipe-app/production/django-secret-arn
+      Type: String
+      Value: !ImportValue RecipeApp-DjangoSecretArn
+
+  RDSSecretArnParameter:
+    Type: AWS::SSM::Parameter
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Stores the ARN of the RDS-managed secret containing database credentials.
+    Properties:
+      Name: /recipe-app/production/rds-secret-arn
+      Type: String
+      Value: !ImportValue RecipeApp-DatabaseSecretArn
+
+  DBHostParameter:
+    Type: AWS::SSM::Parameter
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Stores the PostgreSQL database endpoint used by Django.
+    Properties:
+      Name: /recipe-app/production/db-host
+      Type: String
+      Value: !ImportValue RecipeApp-DatabaseEndpoint
+
+  DBNameParameter:
+    Type: AWS::SSM::Parameter
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Stores the PostgreSQL database name used by the application.
+    Properties:
+      Name: /recipe-app/production/db-name
+      Type: String
+      Value: !ImportValue RecipeApp-DatabaseName
+
+  DBPortParameter:
+    Type: AWS::SSM::Parameter
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Stores the PostgreSQL connection port used by Django.
+    Properties:
+      Name: /recipe-app/production/db-port
+      Type: String
+      Value: !ImportValue RecipeApp-DatabasePort
+
+  MediaBucketParameter:
+    Type: AWS::SSM::Parameter
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Stores the private S3 bucket name used for recipe images and uploaded media.
+    Properties:
+      Name: /recipe-app/production/media-bucket
+      Type: String
+      Value: !ImportValue RecipeApp-MediaBucketName
+
+  CloudFrontDomainParameter:
+    Type: AWS::SSM::Parameter
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Stores the CloudFront domain used to deliver frontend content and recipe images.
+    Properties:
+      Name: /recipe-app/production/cloudfront-domain
+      Type: String
+      Value: !ImportValue RecipeApp-CloudFrontDomainName
+
+  CognitoUserPoolParameter:
+    Type: AWS::SSM::Parameter
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Stores the Cognito User Pool ID used by Django to validate authentication tokens.
+    Properties:
+      Name: /recipe-app/production/cognito-user-pool-id
+      Type: String
+      Value: !ImportValue RecipeApp-CognitoUserPoolId
+
+  CognitoClientParameter:
+    Type: AWS::SSM::Parameter
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Stores the Cognito app client ID used to validate authenticated frontend requests.
+    Properties:
+      Name: /recipe-app/production/cognito-client-id
+      Type: String
+      Value: !ImportValue RecipeApp-CognitoClientId
+
+  AlbDomainParameter:
+    Type: AWS::SSM::Parameter
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Provide the internal ALB hostname for Django host validation
+    Properties:
+      Name: /recipe-app/production/alb-domain
+      Type: String
+      Value: !ImportValue RecipeApp-InternalAlbDnsName

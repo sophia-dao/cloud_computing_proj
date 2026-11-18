@@ -1,10 +1,16 @@
 
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Recipe Suggestion App - Backend Docker image registry
+Metadata:
+  com.aws.cloudformation.Context:
+    arch: Private Amazon ECR repository storing the Docker image used by backend EC2 instances.
 
 Resources:
   BackendRepository:
     Type: AWS::ECR::Repository
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Stores the Django backend Docker image for private EC2 instances to pull during startup.
     Properties:
       RepositoryName: recipe-app-backend
       ImageTagMutability: IMMUTABLE

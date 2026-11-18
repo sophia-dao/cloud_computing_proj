@@ -1,46 +1,38 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Recipe App - Private Backend Auto Scaling
+Metadata:
+  com.aws.cloudformation.Context:
+    arch: Private EC2 Auto Scaling Group running the Django backend across two Availability Zones behind an internal ALB.
 
 Parameters:
   BackendAMI:
-    Type: AWS::EC2::Image::Id
-    Default: ami-0bf29dae3dba19991
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Latest Amazon Linux 2023 x86_64 AMI
 
   BackendInstanceType:
     Type: String
     Default: t3.micro
-
-  BackendInstanceProfile:
-    Type: String
-    Default: recipe-app-backend-BackendInstanceProfile-W7pWnhiQOmJq
-
-  BackendSecurityGroup:
-    Type: AWS::EC2::SecurityGroup::Id
-    Default: sg-0b374bbd534b0ac8e
-
-  PrivateSubnetA:
-    Type: AWS::EC2::Subnet::Id
-    Default: subnet-0cdb39949b89716ec
-
-  PrivateSubnetB:
-    Type: AWS::EC2::Subnet::Id
-    Default: subnet-01579ed4906000b1d
-
-  BackendTargetGroupArn:
-    Type: String
-    Default: arn:aws:elasticloadbalancing:us-east-1:362176666546:targetgroup/recipe-app-private-backend/51b590252cac0b10
+    Description: EC2 instance type for backend application servers
 
 Resources:
   BackendLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Defines the EC2 configuration used to launch private Django backend instances.
+        must:
+          - Launch instances without public IP addresses.
+          - Attach the backend IAM instance profile.
+          - Require IMDSv2.
     Properties:
-      LaunchTemplateName: recipe-app-private-backend
+      LaunchTemplateName: !Sub "${AWS::StackName}-private-backend"
       LaunchTemplateData:
         ImageId: !Ref BackendAMI
         InstanceType: !Ref BackendInstanceType
 
         IamInstanceProfile:
-          Name: !Ref BackendInstanceProfile
+          Name: !ImportValue RecipeApp-BackendInstanceProfileName
 
         MetadataOptions:
           HttpEndpoint: enabled
@@ -51,7 +43,7 @@ Resources:
           - DeviceIndex: 0
             AssociatePublicIpAddress: false
             Groups:
-              - !Ref BackendSecurityGroup
+              - !ImportValue RecipeApp-BackendSecurityGroupId
             DeleteOnTermination: true
 
         TagSpecifications:
@@ -62,12 +54,18 @@ Resources:
 
   BackendAutoScalingGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Maintains two private Django backend instances across two Availability Zones and registers them with the internal ALB target group.
+        must:
+          - Use both private application subnets.
+          - Register instances with BackendTargetGroup.
     Properties:
-      AutoScalingGroupName: recipe-app-private-backend-asg
+      AutoScalingGroupName: !Sub "${AWS::StackName}-backend-asg"
 
       VPCZoneIdentifier:
-        - !Ref PrivateSubnetA
-        - !Ref PrivateSubnetB
+        - !ImportValue RecipeApp-PrivateApplicationSubnetAId
+        - !ImportValue RecipeApp-PrivateApplicationSubnetBId
 
       LaunchTemplate:
         LaunchTemplateId: !Ref BackendLaunchTemplate
@@ -78,7 +76,7 @@ Resources:
       DesiredCapacity: "2"
 
       TargetGroupARNs:
-        - !Ref BackendTargetGroupArn
+        - !ImportValue RecipeApp-BackendTargetGroupArn
 
       HealthCheckType: ELB
       HealthCheckGracePeriod: 300

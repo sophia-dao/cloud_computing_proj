@@ -1,0 +1,25 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Database secret access for Recipe App EC2 instances
+
+Metadata:
+  com.aws.cloudformation.Context:
+    arch: Grants backend EC2 instances permission to retrieve RDS credentials after database creation.
+
+Resources:
+  DatabaseSecretAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Allows the Django backend to retrieve the RDS-managed database credentials.
+    Properties:
+      Description: Read access to Recipe App RDS credentials
+      Roles:
+        - !ImportValue RecipeApp-BackendInstanceRoleName
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ReadDatabaseSecret
+            Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource: !ImportValue RecipeApp-DatabaseSecretArn
