@@ -166,11 +166,21 @@ export default function RecipesForYou() {
 
             {body}
 
-            {authenticated && !loading && !error && (
-                <p className="recipes-for-you__notice">
-                    * Allergen information is still being verified. Recipes
-                    are not guaranteed to be allergen-free.
-                </p>
+            {!loading && !error && (
+                <>
+                    <p className="recipes-for-you__notice">
+                        * Due to the limited variety of recipes currently available,
+                        we recommend using one filter at a time for best results.
+                        Combining multiple filters may result in no matching recipes.
+                    </p>
+
+                    {authenticated && (
+                        <p className="recipes-for-you__notice">
+                            * Allergen information is still being verified. Recipes
+                            are not guaranteed to be allergen-free.
+                        </p>
+                    )}
+                </>
             )}
         </section>
     );

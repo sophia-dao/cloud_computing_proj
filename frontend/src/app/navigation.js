@@ -32,10 +32,10 @@ export const navigationTabs = [
         path: "/login",
         access: "guest",
     },
-    {
-        label: "UI Docs",
-        path: "/ui-docs",
-    },
+    // {
+    //     label: "UI Docs",
+    //     path: "/ui-docs",
+    // },
 ];
 
 export function getVisibleTabs(tabs, isAuthenticated) {
