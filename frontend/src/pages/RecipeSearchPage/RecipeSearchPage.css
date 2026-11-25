@@ -420,3 +420,7 @@
         justify-content: flex-start;
     }
 }
+
+.recipe-search-page>.ui-toast {
+    margin-bottom: 24px;
+}

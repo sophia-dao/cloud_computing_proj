@@ -6,6 +6,7 @@ import RecipeCard from "../../components/recipes/RecipeCard/RecipeCard";
 import SearchBar from "../../components/common/SearchBar/SearchBar";
 import Spinner from "../../components/common/Spinner/Spinner";
 import Button from "../../components/common/Button/Button";
+import Toast from "../../components/common/Toast/Toast";
 import recipesApi from "../../services/recipesApi";
 import allergensApi from "../../services/AllergensApi";
 import tagsApi from "../../services/TagsApi";
@@ -250,6 +251,11 @@ export default function RecipeSearchPage() {
 
     return (
         <section className="recipe-search-page">
+            <Toast
+                type="info"
+                message="Our current recipe collection has limited variety. For best results, we recommend using one filter at a time. Combining multiple filters may return no matching recipes."
+                dismissible={false}
+            />
             <header className="recipe-search-page__header">
                 <span className="recipe-search-page__eyebrow">
                     THE RECIPE COLLECTION
@@ -370,6 +376,7 @@ export default function RecipeSearchPage() {
                         {allergensError}
                     </p>
                 )}
+
                 <p className="recipe-search-page__allergen-notice">
                     * Allergen information is still being verified.
                     Filtered results are not guaranteed to be allergen-free.
