@@ -73,13 +73,20 @@ infrastructure/
 
 ## 1. Select and verify the target AWS account
 
-From the **repository root**, configure a dedicated AWS CLI profile for the new account. For example:
+From the **repository root**, configure a dedicated AWS CLI profile for the new account.
 
-```bash
-export AWS_PROFILE=recipe-app-fresh
-export AWS_DEFAULT_REGION=us-east-1
-aws sts get-caller-identity --region us-east-1
-```
+- **AWS CLI v2 with AWS IAM Identity Center (SSO):** This project's deployment workflow was developed and tested using AWS SSO authentication rather than long-lived IAM access keys. Users should configure an AWS CLI SSO profile and authenticate before running the deployment scripts.
+
+  ```bash
+  aws configure sso
+  aws sso login --profile <your-profile-name>
+  aws sts get-caller-identity --profile <your-profile-name>
+  ```
+
+  Verify that the returned AWS account ID matches the intended deployment account. Set `AWS_PROFILE` to the configured profile before running the scripts.
+
+  **Note:** AWS SSO sessions may expire during deployment. If authentication fails with a token expiration error, run `aws sso login --profile <your-profile-name>` again. If a deployment was interrupted, inspect existing CloudFormation stacks before retrying.
+
 
 Confirm that the returned `Account` is the intended account. **Do not continue if it is the existing project account.** Save the 12-digit account ID:
 
