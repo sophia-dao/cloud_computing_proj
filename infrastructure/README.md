@@ -29,14 +29,21 @@ The VPC contains public infrastructure for the NAT gateway and private applicati
 
 ## Prerequisites
 
-- A separate AWS account with permission to create CloudFormation, VPC networking, NAT gateway, endpoints, ALB, EC2/Auto Scaling, IAM roles and policies, ECR, RDS, S3, CloudFront, Cognito, Secrets Manager, and SSM resources. An administrator may need to approve IAM capabilities and service quotas.
-- AWS CLI v2 configured with credentials for the **target** account; Docker with Buildx; Python 3; Node.js and npm; `cfn-lint` for local validation.
-- Access to the project repository, including `backend/`, `frontend/`, and `infrastructure/`.
-- Region **`us-east-1`**. The deployment scripts are designed for this region.
-- Enough service quotas and budget for a NAT gateway, multiple interface VPC endpoints, ALB, EC2, RDS, CloudFront, and associated data transfer. **Charges accrue even while idle.**
-- Optional: Google OAuth credentials if testing Google Sign-In. Native Cognito configuration and Google federation must be checked against the `cognito.yaml` parameters and deployment script before enabling Google.
+- **AWS account and permissions:** A separate, authorized AWS account with sufficient permissions to provision the complete application infrastructure, including CloudFormation, VPC networking, NAT Gateway, VPC endpoints, ALB, EC2/Auto Scaling, IAM roles and policies, ECR, RDS, S3, CloudFront, Cognito, Secrets Manager, and SSM.
 
-**Protect credentials:** Do not commit AWS keys, Google client secrets, production `.env` files, or generated backend environment files. The deployed backend reads secrets from AWS Secrets Manager rather than embedding them in source code.
+- **AWS IAM Identity Center (SSO):** This project's AWS administrative access was configured through IAM Identity Center. For initial deployment and testing, using an account assigned the **AdministratorAccess permission set** is recommended to simplify provisioning of the complete infrastructure. This level of access should be restricted to authorized administrators; a least-privilege permission set is recommended for ongoing operations.
+
+- **AWS CLI and development tools:** AWS CLI v2 configured with an SSO profile for the target account, Docker with Buildx, Python 3, Node.js and npm, and `cfn-lint` for local CloudFormation validation.
+
+- **Project repository:** Access to the repository, including `backend/`, `frontend/`, and `infrastructure/`.
+
+- **AWS Region:** `us-east-1`. The deployment scripts are designed for this region.
+
+- **AWS service quotas and budget:** Sufficient quotas and budget for NAT Gateway, interface VPC endpoints, ALB, EC2, RDS, CloudFront, and associated data transfer. **Charges accrue even while resources are idle.**
+
+- **Google Sign-In (optional):** Google OAuth credentials are required only when enabling Google federation through Amazon Cognito. Native Cognito configuration and Google federation should be checked against the `cognito.yaml` parameters and deployment script before enabling Google.
+
+**Protect credentials:** Do not commit AWS access keys, Google client secrets, production `.env` files, or generated backend environment files. The deployed backend retrieves application secrets from AWS Secrets Manager rather than embedding them in source code.
 
 ## Repository layout
 
@@ -71,30 +78,81 @@ infrastructure/
     └── start-backend.sh
 ```
 
-## 1. Select and verify the target AWS account
+## 1. Configure AWS IAM Identity Center (SSO) and verify the target account
 
-From the **repository root**, configure a dedicated AWS CLI profile for the new account.
+This project uses **AWS IAM Identity Center (SSO)** for AWS administrative access. The deployment workflow was developed using the `AdministratorAccess` permission set, which is recommended for initial infrastructure provisioning and testing.
 
-- **AWS CLI v2 with AWS IAM Identity Center (SSO):** This project's deployment workflow was developed and tested using AWS SSO authentication rather than long-lived IAM access keys. Users should configure an AWS CLI SSO profile and authenticate before running the deployment scripts.
-
-  ```bash
-  aws configure sso
-  aws sso login --profile <your-profile-name>
-  aws sts get-caller-identity --profile <your-profile-name>
-  ```
-
-  Verify that the returned AWS account ID matches the intended deployment account. Set `AWS_PROFILE` to the configured profile before running the scripts.
-
-  **Note:** AWS SSO sessions may expire during deployment. If authentication fails with a token expiration error, run `aws sso login --profile <your-profile-name>` again. If a deployment was interrupted, inspect existing CloudFormation stacks before retrying.
-
-
-Confirm that the returned `Account` is the intended account. **Do not continue if it is the existing project account.** Save the 12-digit account ID:
+From the **repository root**, configure an AWS CLI SSO profile:
 
 ```bash
-export TARGET_ACCOUNT_ID="123456789012"  # REPLACE with the actual new account ID
+aws configure sso
 ```
 
-The scripts that accept an account ID use it as a safety check; they do not create or switch AWS accounts. Recheck the CLI identity before each major deployment or cleanup operation. If using AWS SSO, sign in to the chosen profile first.
+Enter the following information when prompted:
+
+```text
+SSO session name (Recommended): recipe-app
+SSO start URL [None]: <your-aws-access-portal-url>
+SSO region [None]: us-east-1
+SSO registration scopes [sso:account:access]: [Press Enter]
+```
+
+The SSO start URL is provided by your AWS administrator and typically resembles `https://d-xxxxxxxxxx.awsapps.com/start`. The SSO region must match your IAM Identity Center configuration; it is not necessarily the same as the application deployment region.
+
+AWS CLI will attempt to open a browser for authentication. If the browser does not open, follow the displayed URL. Alternatively, use `aws configure sso --use-device-code`.
+
+After successful authentication, select the intended AWS account and permission set when prompted. For this project's initial deployment, select `AdministratorAccess` if available.
+
+Complete the remaining configuration:
+
+```text
+Default client Region [None]: us-east-1
+CLI default output format (json if not specified) [None]: table
+Profile name [AdministratorAccess-<account-id>]: recipe-app
+```
+
+If prompted to configure AWS skills or an AWS MCP server for an AI coding agent, this is optional and not required for deployment.
+
+**Note:** The SSO session name and AWS CLI profile name are separate settings. This guide uses `recipe-app` for both to simplify configuration.
+
+### Activate and verify the AWS profile
+
+```bash
+export AWS_PROFILE=recipe-app
+export AWS_DEFAULT_REGION=us-east-1
+```
+
+Verify that the CLI is authenticated:
+
+```bash
+aws sts get-caller-identity
+```
+
+Confirm that the returned `Account` matches the intended deployment account. **Do not continue if the account ID is incorrect.**
+
+Set the target account ID using the actual value returned:
+
+```bash
+export TARGET_ACCOUNT_ID="<your-12-digit-account-id>"
+```
+
+The deployment scripts use this account ID as a safety check. They do not create or switch AWS accounts.
+
+### SSO session expiration
+
+AWS SSO sessions may expire during deployment. If authentication fails with a token expiration error, reauthenticate:
+
+```bash
+aws sso login --profile recipe-app
+```
+
+Then verify access again:
+
+```bash
+aws sts get-caller-identity
+```
+
+If deployment was interrupted, inspect existing CloudFormation stacks before rerunning any deployment scripts. The scripts are designed to refuse updates to already-existing stacks.
 
 ## 2. Validate infrastructure locally
 
