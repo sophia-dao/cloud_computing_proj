@@ -6,7 +6,7 @@ EXPECTED_ACCOUNT_ID="${1:?Usage: finalize-autoscaling.sh AWS_ACCOUNT_ID}"
 REGION="us-east-1"
 STACK_NAME="recipe-app-autoscaling"
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEMPLATE="$ROOT/cloudformation/autoscaling-packaged.yaml"
 
 ACCOUNT_ID=$(aws sts get-caller-identity \

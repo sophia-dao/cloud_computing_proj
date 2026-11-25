@@ -58,6 +58,7 @@ fi
 deploy_stack() {
   local name="$1"
   local template="$2"
+  shift 2
   local stack_name="${STACK_PREFIX}-${name}"
 
   echo
@@ -80,7 +81,8 @@ deploy_stack() {
     --template-file "$TEMPLATES/$template" \
     --region "$REGION" \
     --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-    --no-fail-on-empty-changeset
+    --no-fail-on-empty-changeset \
+    "$@"
 
   echo "Completed: $stack_name"
 }
@@ -96,7 +98,11 @@ deploy_stack rds rds.yaml
 deploy_stack database-access database-access.yaml
 deploy_stack frontend frontend.yaml
 deploy_stack media-policy media-policy.yaml
-deploy_stack cognito cognito.yaml
+COGNITO_DOMAIN_PREFIX="recipe-app-${ACTUAL_ACCOUNT_ID}"
+
+deploy_stack cognito cognito.yaml \
+  --parameter-overrides \
+  "CognitoDomainPrefix=$COGNITO_DOMAIN_PREFIX"
 deploy_stack config config.yaml
 
 echo
