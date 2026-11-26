@@ -10,6 +10,16 @@ Parameters:
     Default: 10.0.0.0/16
     Description: CIDR of the Recipe App VPC
 
+  CloudFrontVpcOriginSecurityGroupId:
+    Type: String
+    Default: ''
+    Description: >
+      Optional CloudFront-managed VPC Origin security group ID.
+      Leave empty during initial ALB deployment.
+Conditions:
+  HasCloudFrontVpcOriginSecurityGroup: !Not
+    - !Equals [!Ref CloudFrontVpcOriginSecurityGroupId, '']
+
 Resources:
   InternalAlbSecurityGroup:
     Type: AWS::EC2::SecurityGroup
