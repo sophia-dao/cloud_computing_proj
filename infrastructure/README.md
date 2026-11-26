@@ -2,7 +2,7 @@
 
 This guide describes how to deploy the Recipe Suggestion App into a **new, authorized AWS account** using the CloudFormation templates and scripts in this repository. It is intended for a course evaluator or developer familiar with AWS CLI basics.
 
-> **Validation status (November 2026):** Templates and scripts have been reviewed and locally syntax-checked during preparation, but the complete procedure has **not yet been verified in a fresh AWS account**. 
+**Validation status (November 2026):** The CloudFormation templates and deployment scripts have been reviewed and syntax-checked. The application has been successfully deployed and verified through CloudFront, including backend API connectivity. However, the updated deployment workflow has not yet been independently verified end-to-end in a fresh AWS account.
 
 ## Architecture
 
@@ -258,6 +258,7 @@ Obtain the frontend URL from CloudFormation outputs (the frontend stack exports 
 
 - The CloudFront site loads over HTTPS, including a refreshed client-side route.
 - The `/api/recipes/` endpoint responds successfully through **CloudFront**, not just locally on EC2.
+- The internal ALB security group permits HTTP port 80 traffic from the CloudFront-managed VPC Origin security group.
 - Imported recipes and their images display.
 - Cognito sign-in, sign-out, and authenticated features work. Test Google Sign-In only if configured.
 - The Auto Scaling Group reports two healthy instances and the ALB target group has healthy targets.
