@@ -182,9 +182,31 @@ Read the prompts and confirm only after verifying the target account. This scrip
 
 Wait for the script to finish successfully before proceeding. Inspect failures in CloudFormation **Events**; do not rerun blindly or delete a partially deployed stack without checking dependencies. The script is designed to refuse updates to already-existing stacks.
 
-## 4. Build and push the backend image
+### Verify Docker and Authenticate with Amazon ECR
 
-Make sure Docker is running, then execute:
+Before building and pushing the backend Docker image, ensure Docker is running and authenticate with Amazon ECR:
+
+```bash
+# Verify Docker is running
+docker info >/dev/null && echo "Docker is running"
+
+# Authenticate Docker with Amazon ECR
+aws ecr get-login-password --region us-east-1 \
+  | docker login \
+      --username AWS \
+      --password-stdin \
+      "${TARGET_ACCOUNT_ID}.dkr.ecr.us-east-1.amazonaws.com"
+```
+
+Expected output:
+
+```text
+Docker is running
+Login Succeeded
+```
+
+If an image upload times out, verify your network connection, refresh ECR authentication, and retry the push.
+
 
 ```bash
 bash infrastructure/scripts/push-backend.sh "$TARGET_ACCOUNT_ID"

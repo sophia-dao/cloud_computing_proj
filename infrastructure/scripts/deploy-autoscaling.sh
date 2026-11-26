@@ -9,7 +9,7 @@ STACK_NAME="recipe-app-autoscaling"
 REPOSITORY="recipe-app-backend"
 IMAGE_TAG="final-v1"
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEMPLATE="$ROOT/cloudformation/autoscaling-packaged.yaml"
 
 for cmd in aws python3; do
